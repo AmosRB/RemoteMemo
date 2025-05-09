@@ -1,6 +1,6 @@
-// CreateMessageScreen.js (with cancel button, larger free text, and bottom-aligned buttons)
+// CreateMessageScreen.js (updated: 'שם ההודעה', lifted buttons)
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Audio } from 'expo-av';
 import { useMessages } from '../contexts/MessagesContext';
@@ -9,7 +9,7 @@ export default function CreateMessageScreen() {
   const navigation = useNavigation();
   const { addMessage } = useMessages();
 
-  const [text, setText] = useState('');
+  const [shortName, setShortName] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [freeText, setFreeText] = useState('');
@@ -22,14 +22,13 @@ export default function CreateMessageScreen() {
   const handleSave = () => {
     addMessage({
       id: String(new Date().getTime()),
-      shortName: text,
-      text,
+      shortName,
+      text: freeText,
       date,
       time,
       audioUri: recordingUri,
     });
-    Alert.alert('נשמר!', `ההודעה "${text}" נשמרה לתאריך ${date} בשעה ${time}`);
-    setText('');
+    setShortName('');
     setDate('');
     setTime('');
     setFreeText('');
@@ -68,8 +67,6 @@ export default function CreateMessageScreen() {
       );
       setSound(playbackSound);
       setIsPlaying(true);
-    } else {
-      Alert.alert('אין הקלטה', 'לא נמצאה הודעה קולית להשמעה.');
     }
   };
 
@@ -92,17 +89,19 @@ export default function CreateMessageScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>צור הודעה חדשה</Text>
-      <TextInput style={styles.input} value={text} onChangeText={setText} placeholder="תוכן ההודעה" />
-      <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="תאריך" />
-      <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="שעה" />
+      <View style={styles.formSection}>
+        <TextInput style={styles.input} value={shortName} onChangeText={setShortName} placeholder="שם ההודעה" />
+        <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="תאריך" />
+        <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="שעה" />
 
-      <TextInput
-        style={styles.freeTextBox}
-        value={freeText}
-        onChangeText={setFreeText}
-        placeholder="הוסף טקסט חופשי"
-        multiline
-      />
+        <TextInput
+          style={styles.freeTextBox}
+          value={freeText}
+          onChangeText={setFreeText}
+          placeholder="הוסף טקסט חופשי"
+          multiline
+        />
+      </View>
 
       <View style={styles.buttonGroup}>
         <TouchableOpacity style={styles.recordButton} onPress={startOrStopRecording}>
@@ -127,11 +126,12 @@ export default function CreateMessageScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, backgroundColor: '#d0f0c0', alignItems: 'stretch', padding: 20, justifyContent: 'flex-end' },
-  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
+  container: { flexGrow: 1, backgroundColor: '#d0f0c0', alignItems: 'stretch', padding: 20, justifyContent: 'space-between' },
+  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
+  formSection: { flex: 1 },
   input: { borderWidth: 1, borderColor: '#ccc', marginVertical: 5, padding: 8, borderRadius: 4 },
-  freeTextBox: { borderWidth: 1, borderColor: '#999', marginVertical: 10, padding: 10, borderRadius: 6, minHeight: 150, textAlignVertical: 'top' },
-  buttonGroup: { marginTop: 20 },
+  freeTextBox: { borderWidth: 1, borderColor: '#999', marginVertical: 10, padding: 10, borderRadius: 6, minHeight: 250, textAlignVertical: 'top' },
+  buttonGroup: { marginTop: 10, marginBottom: 20 },
   recordButton: { backgroundColor: '#001f4d', padding: 15, alignItems: 'center', borderRadius: 10, marginBottom: 10 },
   recordButtonText: { color: '#00ccff', fontSize: 16, fontWeight: 'bold' },
   playButton: { backgroundColor: '#001f4d', padding: 15, alignItems: 'center', borderRadius: 10, marginBottom: 10, overflow: 'hidden' },

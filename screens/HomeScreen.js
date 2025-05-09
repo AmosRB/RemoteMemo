@@ -1,8 +1,8 @@
-// HomeScreen.js (fixed to use MessagesContext)
+// HomeScreen.js (fixed height, allow reselect contact)
 import React, { useState, useEffect } from 'react';
 import * as Contacts from 'expo-contacts';
 import { Audio } from 'expo-av';
-import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity, Modal, Button, TextInput as RNTextInput } from 'react-native';
+import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useMessages } from '../contexts/MessagesContext';
 
@@ -13,12 +13,6 @@ export default function HomeScreen() {
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredContacts, setFilteredContacts] = useState([]);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newDate, setNewDate] = useState('');
-  const [newTime, setNewTime] = useState('');
-  const [recording, setRecording] = useState(null);
-  const [recordingUri, setRecordingUri] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -33,7 +27,6 @@ export default function HomeScreen() {
           number: c.phoneNumbers[0].number,
         }));
         setContacts(contactList);
-        setFilteredContacts(contactList);
       }
     })();
   }, []);
@@ -53,48 +46,36 @@ export default function HomeScreen() {
     setFilteredContacts([]);
   };
 
+  const handleReselect = () => {
+    setSelectedContact(null);
+  };
+
   const handleOpenMessage = (message) => {
     navigation.navigate('MessageDetail', {
       messageId: message.id,
     });
   };
 
-  const startRecording = async () => {
-    try {
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      const { recording } = await Audio.Recording.createAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
-      setRecording(recording);
-    } catch (err) {
-      console.error('Failed to start recording', err);
-    }
-  };
-
-  const stopRecording = async () => {
-    if (recording) {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecordingUri(uri);
-      setRecording(null);
-    }
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <View style={{ borderWidth: 1, borderColor: '#ccc', borderRadius: 4, backgroundColor: '#fff', marginVertical: 5, padding: 8 }}>
-          <Text style={{ color: '#888', marginBottom: 4 }}>
-            מחובר {selectedContact ? `${selectedContact.name}` : 'לא נבחר'}
-          </Text>
-          <TextInput
-            style={{ padding: 0 }}
-            placeholder="חפש לפי שם או מספר"
-            value={searchTerm}
-            onChangeText={handleSearch}
-          />
+        <View style={styles.inputContainer}>
+          {selectedContact ? (
+            <TouchableOpacity onPress={handleReselect}>
+              <Text style={styles.connectedText}>מחובר ל: {selectedContact.name} </Text>
+            </TouchableOpacity>
+          ) : (
+            <TextInput
+              style={styles.searchInput}
+              placeholder="חפש איש קשר"
+              placeholderTextColor="#fff"
+              value={searchTerm}
+              onChangeText={handleSearch}
+            />
+          )}
         </View>
 
-        {filteredContacts.length > 0 && (
+        {filteredContacts.length > 0 && !selectedContact && (
           <FlatList
             data={filteredContacts}
             keyExtractor={(item) => item.id}
@@ -111,10 +92,11 @@ export default function HomeScreen() {
       <FlatList
         data={messages}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 80 }}
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.messageBox} onPress={() => handleOpenMessage(item)}>
-            <Text>{item.shortName}</Text>
-            <Text>{item.date} {item.time}</Text>
+            <Text style={styles.messageTitle}>{item.shortName}</Text>
+            <Text style={styles.messageSubtitle}>תזכורת {item.shortName} [{item.date} {item.time}]</Text>
           </TouchableOpacity>
         )}
       />
@@ -127,12 +109,16 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#4b3b72', padding: 10 },
-  topBar: { backgroundColor: '#372d56', padding: 10, borderRadius: 8 },
-  contactItem: { padding: 8, backgroundColor: '#6c5b7b', marginVertical: 2, borderRadius: 4 },
-  contactText: { color: '#fff' },
-  messageBox: { backgroundColor: '#fff', padding: 10, marginVertical: 5, borderRadius: 8 },
-  bottomButton: { backgroundColor: '#001f4d', padding: 15, alignItems: 'center', borderRadius: 10, marginTop: 50, marginBottom: 50 },
-  bottomButtonText: { color: '#00ccff', fontSize: 20, fontWeight: 'bold' },
-  input: { borderWidth: 1, borderColor: '#ccc', marginVertical: 5, padding: 8, borderRadius: 4, backgroundColor: '#fff' }
+  container: { flex: 1, backgroundColor: '#2d2d2d', padding: 10 },
+  topBar: { backgroundColor: '#1a1a1a', padding: 10, borderRadius: 8 },
+  inputContainer: { marginBottom: 8 },
+  connectedText: { color: '#ff9933', fontSize: 18, fontWeight: 'bold', textAlign: 'right' },
+  searchInput: { borderWidth: 1, borderColor: '#444', padding: 6, borderRadius: 4, backgroundColor: '#333', color: '#fff', textAlign: 'right' },
+  contactItem: { padding: 6, backgroundColor: '#6c5b7b', marginVertical: 2, borderRadius: 4 },
+  contactText: { color: '#fff', textAlign: 'right' },
+  messageBox: { backgroundColor: '#fffacd', padding: 8, marginVertical: 4, borderRadius: 8 },
+  messageTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 2, textAlign: 'right' },
+  messageSubtitle: { fontSize: 12, color: '#555', textAlign: 'right' },
+  bottomButton: { backgroundColor: '#001f4d', padding: 12, alignItems: 'center', borderRadius: 10, marginVertical: 40 },
+  bottomButtonText: { color: '#00ccff', fontSize: 18, fontWeight: 'bold' },
 });

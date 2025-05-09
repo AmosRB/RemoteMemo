@@ -1,6 +1,6 @@
-// MessageDetailScreen.js (expo-av + progress bar)
+// MessageDetailScreen.js (full background, buttons lowered, delete/cancel sides swapped)
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Audio } from 'expo-av';
 import { useMessages } from '../contexts/MessagesContext';
@@ -35,13 +35,11 @@ export default function MessageDetailScreen() {
   const handleUpdate = () => {
     const updatedMessage = { ...message, text, date, time, audioUri: recordingUri, freeText };
     updateMessage(updatedMessage);
-    Alert.alert('עודכן!', 'ההודעה עודכנה בהצלחה');
     navigation.goBack();
   };
 
   const handleDelete = () => {
     deleteMessage(message.id);
-    Alert.alert('נמחק!', 'ההודעה נמחקה בהצלחה');
     navigation.goBack();
   };
 
@@ -76,8 +74,6 @@ export default function MessageDetailScreen() {
       );
       setSound(playbackSound);
       setIsPlaying(true);
-    } else {
-      Alert.alert('אין קובץ קול', 'לא נמצאה הודעה קולית להשמעה.');
     }
   };
 
@@ -100,7 +96,7 @@ export default function MessageDetailScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>עריכת הודעה</Text>
-      <TextInput style={styles.input} value={text} onChangeText={setText} placeholder="תוכן ההודעה" />
+      <TextInput style={styles.input} value={text} onChangeText={setText} placeholder="שם ההודעה" />
       <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="תאריך" />
       <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="שעה" />
 
@@ -113,7 +109,7 @@ export default function MessageDetailScreen() {
       />
 
       <TouchableOpacity style={styles.recordButton} onPress={startOrStopRecording}>
-        <Text style={styles.recordButtonText}>{recording ? 'עצור הקלטה' : 'התחל הקלטה חדשה'}</Text>
+        <Text style={styles.recordButtonText}>{recording ? 'עצור הקלטה' : 'הקלטה חדשה'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.playButton} onPress={isPlaying ? stopAudio : playAudio}>
@@ -125,31 +121,35 @@ export default function MessageDetailScreen() {
         <Text style={styles.updateButtonText}>עדכן</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-        <Text style={styles.cancelButtonText}>ביטול</Text>
-      </TouchableOpacity>
+      <View style={styles.rowButtons}>
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+          <Text style={styles.deleteButtonText}>מחק</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-        <Text style={styles.deleteButtonText}>מחק</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+          <Text style={styles.cancelButtonText}>ביטול</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: '#fffacd', alignItems: 'stretch' },
+  container: { flexGrow: 1, padding: 20, backgroundColor: '#fffacd', justifyContent: 'space-between' },
   title: { fontSize: 18, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
   input: { borderWidth: 1, borderColor: '#ccc', marginVertical: 5, padding: 8, borderRadius: 4 },
-  freeTextBox: { borderWidth: 1, borderColor: '#999', marginVertical: 10, padding: 10, borderRadius: 6, minHeight: 80, textAlignVertical: 'top' },
-  recordButton: { backgroundColor: '#001f4d', padding: 15, alignItems: 'center', borderRadius: 10, marginTop: 20 },
+  freeTextBox: { borderWidth: 1, borderColor: '#999', marginVertical: 10, padding: 10, borderRadius: 6, minHeight: 180, textAlignVertical: 'top' },
+  recordButton: { backgroundColor: '#001f4d', padding: 12, alignItems: 'center', borderRadius: 10, marginTop: 15 },
   recordButtonText: { color: '#00ccff', fontSize: 16, fontWeight: 'bold' },
-  playButton: { backgroundColor: '#001f4d', padding: 15, alignItems: 'center', borderRadius: 10, marginTop: 20, overflow: 'hidden' },
+  playButton: { backgroundColor: '#001f4d', padding: 12, alignItems: 'center', borderRadius: 10, marginTop: 15, overflow: 'hidden' },
   playButtonText: { color: '#00ccff', fontSize: 16, fontWeight: 'bold', position: 'absolute' },
   progressBar: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0, 204, 255, 0.3)' },
-  updateButton: { backgroundColor: '#00ccff', padding: 15, alignItems: 'center', borderRadius: 10, marginTop: 30 },
+  updateButton: { backgroundColor: '#00ccff', padding: 12, alignItems: 'center', borderRadius: 10, marginTop: 20 },
   updateButtonText: { color: '#001f4d', fontSize: 16, fontWeight: 'bold' },
-  cancelButton: { backgroundColor: '#555', padding: 15, alignItems: 'center', borderRadius: 10, marginTop: 20 },
-  cancelButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  deleteButton: { backgroundColor: 'red', padding: 15, alignItems: 'center', borderRadius: 10, marginTop: 40, marginBottom: 40 },
+  rowButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15, marginBottom: 30 },
+  deleteButton: { backgroundColor: 'red', padding: 12, alignItems: 'center', borderRadius: 10, flex: 1, marginRight: 5 },
   deleteButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  cancelButton: { backgroundColor: '#555', padding: 12, alignItems: 'center', borderRadius: 10, flex: 1, marginLeft: 5 },
+  cancelButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });
+ 
