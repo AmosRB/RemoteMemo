@@ -1,32 +1,47 @@
-// Updated MessageDetailScreen.js: moved buttons down, added free-text box above
+// MessageDetailScreen.js (expo-av + progress bar)
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Audio } from 'expo-av';
+import { useMessages } from '../contexts/MessagesContext';
 
 export default function MessageDetailScreen() {
-  const route = useRoute();
   const navigation = useNavigation();
-  const { message, onUpdate, onDelete } = route.params;
+  const route = useRoute();
+  const { updateMessage, deleteMessage } = useMessages();
+  const { messageId } = route.params;
 
-  const [text, setText] = useState(message.text);
-  const [date, setDate] = useState(message.date);
-  const [time, setTime] = useState(message.time);
+  const [text, setText] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
   const [freeText, setFreeText] = useState('');
   const [recording, setRecording] = useState(null);
-  const [recordingUri, setRecordingUri] = useState(message.audioUri || '');
+  const [recordingUri, setRecordingUri] = useState('');
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
 
+  const { messages } = useMessages();
+  const message = messages.find(m => m.id === messageId);
+
+  if (!message) {
+    return (
+      <View style={styles.container}>
+        <Text>הודעה לא נמצאה</Text>
+      </View>
+    );
+  }
+
   const handleUpdate = () => {
     const updatedMessage = { ...message, text, date, time, audioUri: recordingUri, freeText };
-    onUpdate(updatedMessage);
+    updateMessage(updatedMessage);
+    Alert.alert('עודכן!', 'ההודעה עודכנה בהצלחה');
     navigation.goBack();
   };
 
   const handleDelete = () => {
-    onDelete(message.id);
+    deleteMessage(message.id);
+    Alert.alert('נמחק!', 'ההודעה נמחקה בהצלחה');
     navigation.goBack();
   };
 
@@ -62,7 +77,7 @@ export default function MessageDetailScreen() {
       setSound(playbackSound);
       setIsPlaying(true);
     } else {
-      alert('אין קובץ קול להאזנה');
+      Alert.alert('אין קובץ קול', 'לא נמצאה הודעה קולית להשמעה.');
     }
   };
 
@@ -93,7 +108,7 @@ export default function MessageDetailScreen() {
         style={styles.freeTextBox}
         value={freeText}
         onChangeText={setFreeText}
-        placeholder="הוסף טקסט חופשי להודעה"
+        placeholder="הוסף טקסט חופשי"
         multiline
       />
 
@@ -103,7 +118,7 @@ export default function MessageDetailScreen() {
 
       <TouchableOpacity style={styles.playButton} onPress={isPlaying ? stopAudio : playAudio}>
         <View style={[styles.progressBar, { width: `${progress}%` }]} />
-        <Text style={styles.playButtonText}>{isPlaying ? 'עצור השמעה' : 'השמע הודעה קולית'}</Text>
+        <Text style={styles.playButtonText}>{isPlaying ? 'עצור השמעה' : 'השמע הקלטה'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.updateButton} onPress={handleUpdate}>

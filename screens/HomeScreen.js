@@ -1,36 +1,24 @@
-// Updated HomeScreen.js with voice recording integration
+// HomeScreen.js (fixed to use MessagesContext)
 import React, { useState, useEffect } from 'react';
 import * as Contacts from 'expo-contacts';
-import * as Audio from 'expo-av';
+import { Audio } from 'expo-av';
 import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity, Modal, Button, TextInput as RNTextInput } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { useMessages } from '../contexts/MessagesContext';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
-  const route = useRoute();
+  const { messages } = useMessages();
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredContacts, setFilteredContacts] = useState([]);
-  const [messages, setMessages] = useState([
-    { id: '1', shortName: 'תזכורת א', text: 'תזכורת לשתות מים', date: '2025-05-10', time: '10:00' },
-    { id: '2', shortName: 'תזכורת ב', text: 'לקחת תרופות', date: '2025-05-11', time: '08:00' }
-  ]);
   const [modalVisible, setModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
   const [recording, setRecording] = useState(null);
   const [recordingUri, setRecordingUri] = useState('');
-
-  useEffect(() => {
-    if (route.params?.updatedMessage) {
-      setMessages(prev => prev.map(m => m.id === route.params.updatedMessage.id ? route.params.updatedMessage : m));
-    }
-    if (route.params?.deletedMessageId) {
-      setMessages(prev => prev.filter(m => m.id !== route.params.deletedMessageId));
-    }
-  }, [route.params]);
 
   useEffect(() => {
     (async () => {
@@ -67,54 +55,28 @@ export default function HomeScreen() {
 
   const handleOpenMessage = (message) => {
     navigation.navigate('MessageDetail', {
-      message,
-      onUpdate: (updatedMsg) => {
-        setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
-      },
-      onDelete: (id) => {
-        setMessages(prev => prev.filter(m => m.id !== id));
-      }
+      messageId: message.id,
     });
-  };
-
-  const handleSaveNewMessage = () => {
-    const newMessage = {
-      id: (messages.length + 1).toString(),
-      shortName: newName,
-      text: 'הודעה קולית מוקלטת',
-      date: newDate,
-      time: newTime,
-      audioUri: recordingUri,
-    };
-    setMessages(prev => [...prev, newMessage]);
-    setModalVisible(false);
-    setNewName('');
-    setNewDate('');
-    setNewTime('');
-    setRecordingUri('');
   };
 
   const startRecording = async () => {
     try {
-      console.log('Requesting permissions..');
-      await Audio.Audio.requestPermissionsAsync();
-      await Audio.Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-      console.log('Starting recording..');
-      const { recording } = await Audio.Audio.Recording.createAsync(Audio.Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
+      await Audio.requestPermissionsAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording } = await Audio.Recording.createAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
       setRecording(recording);
-      console.log('Recording started');
     } catch (err) {
       console.error('Failed to start recording', err);
     }
   };
 
   const stopRecording = async () => {
-    console.log('Stopping recording..');
-    setRecording(undefined);
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-    setRecordingUri(uri);
-    console.log('Recording stopped and stored at', uri);
+    if (recording) {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecordingUri(uri);
+      setRecording(null);
+    }
   };
 
   return (
@@ -157,26 +119,9 @@ export default function HomeScreen() {
         )}
       />
 
-      <TouchableOpacity style={styles.bottomButton} onPress={() => setModalVisible(true)}>
-        <Text style={styles.bottomButtonText}>הודעה קולית חדשה</Text>
+      <TouchableOpacity style={styles.bottomButton} onPress={() => navigation.navigate('CreateMessage')}>
+        <Text style={styles.bottomButtonText}>הודעה חדשה</Text>
       </TouchableOpacity>
-
-      <Modal visible={modalVisible} animationType="slide">
-        <View style={{ flex: 1, padding: 20, justifyContent: 'center' }}>
-          <Text style={{ fontSize: 18, marginBottom: 10 }}>הקלד שם להודעה:</Text>
-          <RNTextInput style={styles.input} value={newName} onChangeText={setNewName} placeholder="שם הודעה" />
-
-          <Text style={{ fontSize: 18, marginBottom: 10 }}>בחר תאריך:</Text>
-          <RNTextInput style={styles.input} value={newDate} onChangeText={setNewDate} placeholder="תאריך (YYYY-MM-DD)" />
-
-          <Text style={{ fontSize: 18, marginBottom: 10 }}>בחר שעה:</Text>
-          <RNTextInput style={styles.input} value={newTime} onChangeText={setNewTime} placeholder="שעה (HH:MM)" />
-
-          <Button title={recording ? 'עצור הקלטה' : 'התחל הקלטה'} onPress={recording ? stopRecording : startRecording} />
-          <Button title="שמור הודעה" onPress={handleSaveNewMessage} disabled={!recordingUri} />
-          <Button title="בטל" onPress={() => setModalVisible(false)} color="red" />
-        </View>
-      </Modal>
     </View>
   );
 }
