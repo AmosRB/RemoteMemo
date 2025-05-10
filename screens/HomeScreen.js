@@ -1,18 +1,24 @@
-// HomeScreen.js (fixed height, allow reselect contact)
+// HomeScreen.js (final unified with fixed bottom button, modal, status bars, shadow)
 import React, { useState, useEffect } from 'react';
 import * as Contacts from 'expo-contacts';
 import { Audio } from 'expo-av';
-import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity, Modal, Button, TextInput as RNTextInput } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useMessages } from '../contexts/MessagesContext';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
-  const { messages } = useMessages();
+  const { messages, addMessage } = useMessages();
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredContacts, setFilteredContacts] = useState([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newDate, setNewDate] = useState('');
+  const [newTime, setNewTime] = useState('');
+  const [recording, setRecording] = useState(null);
+  const [recordingUri, setRecordingUri] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -51,9 +57,45 @@ export default function HomeScreen() {
   };
 
   const handleOpenMessage = (message) => {
-    navigation.navigate('MessageDetail', {
-      messageId: message.id,
-    });
+    navigation.navigate('MessageDetail', { messageId: message.id });
+  };
+
+  const handleSaveNewMessage = () => {
+    const newMessage = {
+      id: Date.now().toString(),
+      shortName: newName,
+      text: 'הודעה קולית מוקלטת',
+      date: newDate,
+      time: newTime,
+      audioUri: recordingUri,
+      source: 'local',
+      status: 'unread',
+      played: false,
+    };
+    addMessage(newMessage);
+    setModalVisible(false);
+    setNewName('');
+    setNewDate('');
+    setNewTime('');
+    setRecordingUri('');
+  };
+
+  const startRecording = async () => {
+    try {
+      await Audio.requestPermissionsAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording } = await Audio.Recording.createAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
+      setRecording(recording);
+    } catch (err) {
+      console.error('Failed to start recording', err);
+    }
+  };
+
+  const stopRecording = async () => {
+    setRecording(undefined);
+    await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
+    setRecordingUri(uri);
   };
 
   return (
@@ -62,7 +104,7 @@ export default function HomeScreen() {
         <View style={styles.inputContainer}>
           {selectedContact ? (
             <TouchableOpacity onPress={handleReselect}>
-              <Text style={styles.connectedText}>מחובר ל: {selectedContact.name} </Text>
+              <Text style={styles.connectedText}>מחובר ל: {selectedContact.name}</Text>
             </TouchableOpacity>
           ) : (
             <TextInput
@@ -94,16 +136,32 @@ export default function HomeScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: 80 }}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.messageBox} onPress={() => handleOpenMessage(item)}>
-            <Text style={styles.messageTitle}>{item.shortName}</Text>
-            <Text style={styles.messageSubtitle}>תזכורת {item.shortName} [{item.date} {item.time}]</Text>
+          <TouchableOpacity
+            style={[
+              styles.messageBox,
+              item.source === 'remote' ? styles.incoming : styles.outgoing,
+              styles.messageShadow,
+            ]}
+            onPress={() => handleOpenMessage(item)}
+          >
+            <View style={styles.statusBarContainer}>
+              <View style={[styles.statusBar, item.status === 'read' ? styles.statusRead : styles.statusUnread]} />
+              <View style={[styles.statusBar, item.played ? styles.statusPlayed : styles.statusUnplayed]} />
+            </View>
+            <View>
+              <Text style={styles.messageTitle}>{item.shortName}</Text>
+              <Text style={styles.messageSubtitle}>תזכורת {item.shortName} [{item.date} {item.time}]</Text>
+            </View>
           </TouchableOpacity>
         )}
       />
 
-      <TouchableOpacity style={styles.bottomButton} onPress={() => navigation.navigate('CreateMessage')}>
-        <Text style={styles.bottomButtonText}>הודעה חדשה</Text>
-      </TouchableOpacity>
+<TouchableOpacity style={styles.bottomButton} onPress={() => navigation.navigate('CreateMessage')}>
+  <Text style={styles.bottomButtonText}>הודעה קולית חדשה</Text>
+</TouchableOpacity>
+
+
+  
     </View>
   );
 }
@@ -116,9 +174,35 @@ const styles = StyleSheet.create({
   searchInput: { borderWidth: 1, borderColor: '#444', padding: 6, borderRadius: 4, backgroundColor: '#333', color: '#fff', textAlign: 'right' },
   contactItem: { padding: 6, backgroundColor: '#6c5b7b', marginVertical: 2, borderRadius: 4 },
   contactText: { color: '#fff', textAlign: 'right' },
-  messageBox: { backgroundColor: '#fffacd', padding: 8, marginVertical: 4, borderRadius: 8 },
+  messageBox: {
+    backgroundColor: '#fffacd',
+    padding: 8,
+    marginVertical: 8,
+    marginHorizontal: 4,
+    borderRadius: 8,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    elevation: 20,  // חשוב לאנדרואיד
+  },
+  incoming: { alignSelf: 'flex-start', backgroundColor: '#d0e8ff' },
+  outgoing: { alignSelf: 'flex-end', backgroundColor: '#fffacd' },
+  messageShadow: {
+    shadowColor: '#ff9933',
+    shadowOffset: { width: 3, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 5,
+    elevation: 20,
+  },
+  
+  statusBarContainer: { flexDirection: 'column', marginLeft: 6 },
+  statusBar: { width: 6, height: 20, borderRadius: 3, marginVertical: 1 },
+  statusUnread: { backgroundColor: 'blue' },
+  statusRead: { backgroundColor: 'green' },
+  statusUnplayed: { backgroundColor: 'red' },
+  statusPlayed: { backgroundColor: 'orange' },
   messageTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 2, textAlign: 'right' },
   messageSubtitle: { fontSize: 12, color: '#555', textAlign: 'right' },
   bottomButton: { backgroundColor: '#001f4d', padding: 12, alignItems: 'center', borderRadius: 10, marginVertical: 40 },
   bottomButtonText: { color: '#00ccff', fontSize: 18, fontWeight: 'bold' },
+  input: { borderWidth: 1, borderColor: '#ccc', marginVertical: 5, padding: 8, borderRadius: 4, backgroundColor: '#fff' },
 });

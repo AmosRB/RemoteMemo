@@ -1,4 +1,4 @@
-// CreateMessageScreen.js (updated: 'שם ההודעה', lifted buttons)
+// CreateMessageScreen.js (updated with source, status, played)
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -27,6 +27,9 @@ export default function CreateMessageScreen() {
       date,
       time,
       audioUri: recordingUri,
+      source: 'local',        // added
+      status: 'unread',       // added
+      played: false,          // added
     });
     setShortName('');
     setDate('');
