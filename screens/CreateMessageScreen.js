@@ -1,4 +1,3 @@
-// CreateMessageScreen.js (updated with source, status, played)
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -23,13 +22,15 @@ export default function CreateMessageScreen() {
     addMessage({
       id: String(new Date().getTime()),
       shortName,
-      text: freeText,
+      text: freeText || '(ללא טקסט)',
       date,
       time,
-      audioUri: recordingUri,
-      source: 'local',        // added
-      status: 'unread',       // added
-      played: false,          // added
+      audioUri: recordingUri || null,
+      source: 'local',
+      status: 'unread',
+      played: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
     setShortName('');
     setDate('');
@@ -96,7 +97,6 @@ export default function CreateMessageScreen() {
         <TextInput style={styles.input} value={shortName} onChangeText={setShortName} placeholder="שם ההודעה" />
         <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="תאריך" />
         <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="שעה" />
-
         <TextInput
           style={styles.freeTextBox}
           value={freeText}
@@ -111,7 +111,7 @@ export default function CreateMessageScreen() {
           <Text style={styles.recordButtonText}>{recording ? 'עצור הקלטה' : 'התחל הקלטה חדשה'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.playButton} onPress={isPlaying ? stopAudio : playAudio}>
+        <TouchableOpacity style={styles.playButton} onPress={isPlaying ? stopAudio : playAudio} disabled={!recordingUri}>
           <View style={[styles.progressBar, { width: `${progress}%` }]} />
           <Text style={styles.playButtonText}>{isPlaying ? 'עצור השמעה' : 'השמע הקלטה'}</Text>
         </TouchableOpacity>
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
   formSection: { flex: 1 },
   input: { borderWidth: 1, borderColor: '#ccc', marginVertical: 5, padding: 8, borderRadius: 4 },
-  freeTextBox: { borderWidth: 1, borderColor: '#999', marginVertical: 10, padding: 10, borderRadius: 6, minHeight: 250, textAlignVertical: 'top' },
+  freeTextBox: { borderWidth: 1, borderColor: '#999', marginVertical: 10, padding: 10, borderRadius: 6, minHeight: 180, textAlignVertical: 'top' },
   buttonGroup: { marginTop: 10, marginBottom: 20 },
   recordButton: { backgroundColor: '#001f4d', padding: 15, alignItems: 'center', borderRadius: 10, marginBottom: 10 },
   recordButtonText: { color: '#00ccff', fontSize: 16, fontWeight: 'bold' },

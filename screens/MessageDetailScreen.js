@@ -1,4 +1,3 @@
-// MessageDetailScreen.js (full background, buttons lowered, delete/cancel sides swapped)
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -8,21 +7,20 @@ import { useMessages } from '../contexts/MessagesContext';
 export default function MessageDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const { updateMessage, deleteMessage } = useMessages();
+  const { updateMessage, deleteMessage, messages } = useMessages();
   const { messageId } = route.params;
 
-  const [text, setText] = useState('');
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
-  const [freeText, setFreeText] = useState('');
+  const message = messages.find(m => m.id === messageId);
+
+  const [shortName, setShortName] = useState(message?.shortName || '');
+  const [date, setDate] = useState(message?.date || '');
+  const [time, setTime] = useState(message?.time || '');
+  const [freeText, setFreeText] = useState(message?.text || '');
   const [recording, setRecording] = useState(null);
-  const [recordingUri, setRecordingUri] = useState('');
+  const [recordingUri, setRecordingUri] = useState(message?.audioUri || '');
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-
-  const { messages } = useMessages();
-  const message = messages.find(m => m.id === messageId);
 
   if (!message) {
     return (
@@ -33,7 +31,15 @@ export default function MessageDetailScreen() {
   }
 
   const handleUpdate = () => {
-    const updatedMessage = { ...message, text, date, time, audioUri: recordingUri, freeText };
+    const updatedMessage = {
+      ...message,
+      shortName,
+      date,
+      time,
+      text: freeText,
+      audioUri: recordingUri,
+      updatedAt: new Date().toISOString(),
+    };
     updateMessage(updatedMessage);
     navigation.goBack();
   };
@@ -93,13 +99,35 @@ export default function MessageDetailScreen() {
     }
   };
 
+  // future-ready: status labels
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'pending':
+        return 'ממתין לשליחה';
+      case 'delivered':
+        return 'נשלח - התקבל';
+      case 'read':
+        return 'נקרא';
+      case 'played':
+        return 'הופעל';
+      default:
+        return 'לא ידוע';
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>עריכת הודעה</Text>
-      <TextInput style={styles.input} value={text} onChangeText={setText} placeholder="שם ההודעה" />
+      <Text style={styles.title}>{shortName}</Text>
+
+      <View style={styles.statusBox}>
+        <Text style={styles.statusText}>
+          סטטוס: {getStatusLabel(message.status)}
+        </Text>
+      </View>
+
+      <TextInput style={styles.input} value={shortName} onChangeText={setShortName} placeholder="שם ההודעה" />
       <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="תאריך" />
       <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="שעה" />
-
       <TextInput
         style={styles.freeTextBox}
         value={freeText}
@@ -112,7 +140,7 @@ export default function MessageDetailScreen() {
         <Text style={styles.recordButtonText}>{recording ? 'עצור הקלטה' : 'הקלטה חדשה'}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.playButton} onPress={isPlaying ? stopAudio : playAudio}>
+      <TouchableOpacity style={styles.playButton} onPress={isPlaying ? stopAudio : playAudio} disabled={!recordingUri}>
         <View style={[styles.progressBar, { width: `${progress}%` }]} />
         <Text style={styles.playButtonText}>{isPlaying ? 'עצור השמעה' : 'השמע הקלטה'}</Text>
       </TouchableOpacity>
@@ -137,6 +165,8 @@ export default function MessageDetailScreen() {
 const styles = StyleSheet.create({
   container: { flexGrow: 1, padding: 20, backgroundColor: '#fffacd', justifyContent: 'space-between' },
   title: { fontSize: 18, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
+  statusBox: { backgroundColor: '#e0e0e0', padding: 6, borderRadius: 4, marginVertical: 8 },
+  statusText: { fontSize: 14, color: '#333', textAlign: 'right' },
   input: { borderWidth: 1, borderColor: '#ccc', marginVertical: 5, padding: 8, borderRadius: 4 },
   freeTextBox: { borderWidth: 1, borderColor: '#999', marginVertical: 10, padding: 10, borderRadius: 6, minHeight: 180, textAlignVertical: 'top' },
   recordButton: { backgroundColor: '#001f4d', padding: 12, alignItems: 'center', borderRadius: 10, marginTop: 15 },
@@ -152,4 +182,3 @@ const styles = StyleSheet.create({
   cancelButton: { backgroundColor: '#555', padding: 12, alignItems: 'center', borderRadius: 10, flex: 1, marginLeft: 5 },
   cancelButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });
- 
