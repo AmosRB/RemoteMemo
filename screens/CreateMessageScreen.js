@@ -3,6 +3,9 @@ import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 
 import { useNavigation } from '@react-navigation/native';
 import { Audio } from 'expo-av';
 import { useMessages } from '../contexts/MessagesContext';
+import * as FileSystem from 'expo-file-system';
+
+const DEVICE_ID = '123456';
 
 export default function CreateMessageScreen() {
   const navigation = useNavigation();
@@ -14,6 +17,7 @@ export default function CreateMessageScreen() {
   const [freeText, setFreeText] = useState('');
   const [recording, setRecording] = useState(null);
   const [recordingUri, setRecordingUri] = useState('');
+  const [audioBase64, setAudioBase64] = useState('');
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -21,11 +25,12 @@ export default function CreateMessageScreen() {
   const handleSave = () => {
     addMessage({
       id: String(new Date().getTime()),
+      senderId: DEVICE_ID,
       shortName,
       text: freeText || '(ללא טקסט)',
       date,
       time,
-      audioUri: recordingUri || null,
+      audioBase64: audioBase64 || null,
       source: 'local',
       status: 'unread',
       played: false,
@@ -37,6 +42,7 @@ export default function CreateMessageScreen() {
     setTime('');
     setFreeText('');
     setRecordingUri('');
+    setAudioBase64('');
     navigation.goBack();
   };
 
@@ -50,6 +56,13 @@ export default function CreateMessageScreen() {
       const uri = recording.getURI();
       setRecordingUri(uri);
       setRecording(null);
+
+      if (uri) {
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        setAudioBase64(base64);
+      }
     } else {
       try {
         await Audio.requestPermissionsAsync();
@@ -117,7 +130,7 @@ export default function CreateMessageScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>שמור הודעה</Text>
+          <Text style={styles.saveButtonText}>שלח</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>

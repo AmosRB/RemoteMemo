@@ -1,21 +1,29 @@
-// App.js (fixed with MessagesProvider)
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import HomeScreen from './screens/HomeScreen';
 import MessageDetailScreen from './screens/MessageDetailScreen';
 import JournalScreen from './screens/JournalScreen';
 import CreateMessageScreen from './screens/CreateMessageScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import { View, Text, StyleSheet } from 'react-native';
+import ReceivedMessageScreen from './screens/ReceivedMessageScreen';
 import { MessagesProvider } from './contexts/MessagesContext';
 
 const Stack = createStackNavigator();
 
 function AppHeader() {
+  const navigation = useNavigation();
+
   return (
     <View style={styles.headerContainer}>
       <Text style={styles.headerText}>Remote Memo CONNECT</Text>
+      <TouchableOpacity
+        style={styles.settingsButton}
+        onPress={() => navigation.navigate('Settings')}
+      >
+        <Text style={styles.settingsIcon}>⚙️</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -34,6 +42,7 @@ export default function App() {
           <Stack.Screen name="Journal" component={JournalScreen} />
           <Stack.Screen name="CreateMessage" component={CreateMessageScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="ReceivedMessage" component={ReceivedMessageScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </MessagesProvider>
@@ -41,6 +50,22 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  headerContainer: { backgroundColor: '#001f4d', padding: 15, alignItems: 'center' },
+  headerContainer: {
+    backgroundColor: '#001f4d',
+    padding: 15,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
   headerText: { color: '#00ccff', fontSize: 20, fontWeight: 'bold' },
+  settingsButton: {
+    position: 'absolute',
+    left: 10,
+    top: 15,
+  },
+  settingsIcon: {
+    fontSize: 18,
+    color: '#00ccff',
+  },
 });

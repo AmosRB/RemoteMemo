@@ -102,18 +102,24 @@ export default function MessageDetailScreen() {
   // future-ready: status labels
   const getStatusLabel = (status) => {
     switch (status) {
+      case 'unread':
+        return 'טרם נשלחה';
       case 'pending':
         return 'ממתין לשליחה';
       case 'delivered':
-        return 'נשלח - התקבל';
-      case 'read':
-        return 'נקרא';
+        return 'נשלחה והתקבלה';
+      case 'received':
+        return 'התקבלה אצל הנמען';
       case 'played':
-        return 'הופעל';
+        return 'נשמעה אך טרם בוצעה';
+      case 'read':
+        return 'בוצעה ואושרה';
       default:
         return 'לא ידוע';
     }
   };
+  
+  
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
