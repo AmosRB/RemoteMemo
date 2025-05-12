@@ -1,4 +1,4 @@
-// HomeScreen.js - גרסה מתוקנת: deviceId דינמי מ־AsyncStorage
+// HomeScreen.js - פסי סטטוס קבועים עם צבע משתנה לפי סטטוס
 
 import React, { useState, useEffect, useRef } from 'react';
 import * as Contacts from 'expo-contacts';
@@ -11,23 +11,22 @@ import sendSyncQuery from '../utils/sendSyncQuery';
 import playNotificationSound from '../utils/playNotificationSound';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const PEER_IP = '192.168.1.228';
-
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { messages } = useMessages();
   const [deviceId, setDeviceId] = useState(null);
+  const [peerIp, setPeerIp] = useState(null);
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredContacts, setFilteredContacts] = useState([]);
 
   useEffect(() => {
-    AsyncStorage.getItem('deviceId').then(setDeviceId);
+    AsyncStorage.getItem('deviceId').then(id => setDeviceId(id));
+    AsyncStorage.getItem('peerIp').then(ip => setPeerIp(ip || '192.168.1.227'));
   }, []);
 
-  const { isSynced } = useSyncEngine(PEER_IP, sendSyncQuery, deviceId);
-
+  const { isSynced } = useSyncEngine(peerIp, sendSyncQuery, deviceId);
   const blinkingOpacity = useRef(new Animated.Value(1)).current;
   const lastSeenId = useRef(null);
 
@@ -60,6 +59,24 @@ export default function HomeScreen() {
       }
     })();
   }, []);
+
+  const manualSync = async () => {
+    if (!deviceId || !peerIp) return;
+  
+    const outgoingMessages = messages.filter((msg) => msg.senderId === deviceId);
+    const syncPayload = {
+      deviceId,
+      knownStatuses: outgoingMessages.map((m) => ({ id: m.id, status: m.status })),
+    };
+  
+    try {
+      const result = await sendSyncQuery(peerIp, syncPayload);
+      console.log('🔁 Manual sync triggered:', result);
+    } catch (err) {
+      console.warn('⚠️ Manual sync failed:', err);
+    }
+  };
+  
 
   const handleSearch = (text) => {
     setSearchTerm(text);
@@ -101,9 +118,9 @@ export default function HomeScreen() {
         >
           {isMine && (
             <View style={styles.statusBarContainer}>
-              <View style={styles.statusLineOrange} />
-              <View style={styles.statusDotRed} />
-              <View style={styles.statusLineBlue} />
+              <View style={[styles.statusLineBlue, item.status !== 'sent' && styles.active]} />
+              <View style={[styles.statusDotRed, !['received', 'played'].includes(item.status) && styles.inactive]} />
+              <View style={[styles.statusLineOrange, item.status !== 'played' && styles.inactive]} />
             </View>
           )}
 
@@ -121,7 +138,10 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <View style={styles.topBar}>
         <View style={styles.rowWithIndicator}>
-          <View style={[styles.syncIndicator, isSynced ? styles.green : styles.red]} />
+        <TouchableOpacity onPress={manualSync}>
+  <View style={[styles.syncIndicator, isSynced ? styles.green : styles.red]} />
+</TouchableOpacity>
+
           {selectedContact ? (
             <TouchableOpacity onPress={handleReselect}>
               <Text style={styles.connectedText}>מחובר ל: {selectedContact.name}</Text>
@@ -159,7 +179,7 @@ export default function HomeScreen() {
       />
 
       <TouchableOpacity style={styles.bottomButton} onPress={() => navigation.navigate('CreateMessage')}>
-        <Text style={styles.bottomButtonText}>הודעה קולית חדשה</Text>
+        <Text style={styles.bottomButtonText}>הודעה חדשה</Text>
       </TouchableOpacity>
     </View>
   );
@@ -186,13 +206,19 @@ const styles = StyleSheet.create({
   incoming: { alignSelf: 'flex-start', backgroundColor: '#d0e8ff' },
   outgoing: { alignSelf: 'flex-end', backgroundColor: '#fffacd' },
   messageShadow: { shadowColor: '#ff9933', shadowOffset: { width: 3, height: 5 }, shadowOpacity: 1, shadowRadius: 5, elevation: 10 },
-  statusBarContainer: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginLeft: 8, gap: 3 },
+  statusBarContainer: { flexDirection: 'column-reverse', alignItems: 'center', justifyContent: 'flex-start', marginLeft: 8, gap: 3 },
   statusLineBlue: { width: 4, height: 16, backgroundColor: 'blue', borderRadius: 2 },
   statusLineOrange: { width: 4, height: 16, backgroundColor: 'orange', borderRadius: 2 },
-  statusDotRed: { width: 10, height: 10, backgroundColor: 'red', borderRadius: 5 },
+  statusDotRed: {
+    width: 12,
+    height: 12,
+    backgroundColor: 'red',
+    borderRadius: 6, 
+  },
+  inactive: { backgroundColor: 'transparent' },
   syncIndicator: { width: 10, height: 10, borderRadius: 5 },
   green: { backgroundColor: 'green' },
-  red: { backgroundColor: 'red' },
+  red: { backgroundColor: 'red' },  
   messageTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 1, textAlign: 'right' },
   messageSubtitle: { fontSize: 11, color: '#555', textAlign: 'right' },
   messageContent: { fontSize: 12, color: '#888', marginTop: 2, textAlign: 'right' },

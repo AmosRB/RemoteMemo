@@ -1,3 +1,5 @@
+// MessageDetailScreen.js - תצוגת פסים רק כשסטטוס מתאים (ללא אפורים)
+
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -99,48 +101,42 @@ export default function MessageDetailScreen() {
     }
   };
 
-  // future-ready: status labels
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'unread':
-        return 'טרם נשלחה';
-      case 'pending':
-        return 'ממתין לשליחה';
-      case 'delivered':
-        return 'נשלחה והתקבלה';
-      case 'received':
-        return 'התקבלה אצל הנמען';
-      case 'played':
-        return 'נשמעה אך טרם בוצעה';
-      case 'read':
-        return 'בוצעה ואושרה';
-      default:
-        return 'לא ידוע';
+      case 'unread': return 'טרם נשלחה';
+      case 'pending': return 'ממתין לשליחה';
+      case 'delivered': return 'נשלחה והתקבלה';
+      case 'received': return 'התקבלה אצל הנמען';
+      case 'played': return 'נשמעה אך טרם בוצעה';
+      case 'read': return 'בוצעה ואושרה';
+      default: return 'לא ידוע';
     }
   };
-  
-  
+
+  const showBlueLine = ['received', 'played'].includes(message.status);
+  const showRedDot = message.status === 'played';
+  const showOrangeLine = message.status === 'activated'; // future only
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{shortName}</Text>
 
+      {(showBlueLine || showRedDot || showOrangeLine) && (
+        <View style={styles.statusBarContainer}>
+          {showOrangeLine && <View style={styles.statusLineOrange} />}
+          {showRedDot && <View style={styles.statusDotRed} />}
+          {showBlueLine && <View style={styles.statusLineBlue} />}
+        </View>
+      )}
+
       <View style={styles.statusBox}>
-        <Text style={styles.statusText}>
-          סטטוס: {getStatusLabel(message.status)}
-        </Text>
+        <Text style={styles.statusText}>סטטוס: {getStatusLabel(message.status)}</Text>
       </View>
 
       <TextInput style={styles.input} value={shortName} onChangeText={setShortName} placeholder="שם ההודעה" />
       <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="תאריך" />
       <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="שעה" />
-      <TextInput
-        style={styles.freeTextBox}
-        value={freeText}
-        onChangeText={setFreeText}
-        placeholder="הוסף טקסט חופשי"
-        multiline
-      />
+      <TextInput style={styles.freeTextBox} value={freeText} onChangeText={setFreeText} placeholder="הוסף טקסט חופשי" multiline />
 
       <TouchableOpacity style={styles.recordButton} onPress={startOrStopRecording}>
         <Text style={styles.recordButtonText}>{recording ? 'עצור הקלטה' : 'הקלטה חדשה'}</Text>
@@ -187,4 +183,8 @@ const styles = StyleSheet.create({
   deleteButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   cancelButton: { backgroundColor: '#555', padding: 12, alignItems: 'center', borderRadius: 10, flex: 1, marginLeft: 5 },
   cancelButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  statusBarContainer: { flexDirection: 'column-reverse', alignItems: 'center', justifyContent: 'flex-start', marginBottom: 12, gap: 3 },
+  statusLineBlue: { width: 4, height: 16, backgroundColor: 'blue', borderRadius: 2 },
+  statusLineOrange: { width: 4, height: 16, backgroundColor: 'orange', borderRadius: 2 },
+  statusDotRed: { width: 10, height: 10, backgroundColor: 'red', borderRadius: 5 }
 });

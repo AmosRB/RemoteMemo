@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Audio } from 'expo-av';
 import { useMessages } from '../contexts/MessagesContext';
@@ -29,14 +29,7 @@ export default function CreateMessageScreen() {
   }, []);
 
   const handleSave = async () => {
-    if (!deviceId) {
-      Alert.alert('שגיאה', 'מזהה מכשיר לא נטען עדיין.');
-      return;
-    }
-    if (!receiverId.trim()) {
-      Alert.alert('שגיאה', 'אנא הזן מזהה מקבל (receiverId)');
-      return;
-    }
+    if (!deviceId || !receiverId.trim()) return;
 
     const newMessage = {
       id: String(new Date().getTime()),
@@ -65,8 +58,6 @@ export default function CreateMessageScreen() {
     } catch (err) {
       console.warn('🔁 שליחה לשרת נכשלה:', err);
     }
-
-    Alert.alert('✅ הודעה נשמרה', `שם: ${shortName}`);
 
     setShortName('');
     setDate('');

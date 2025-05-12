@@ -1,3 +1,5 @@
+// useSyncEngine.js - משופר עם peerFound מהשרת
+
 import { useEffect, useState } from 'react';
 import { useMessages } from '../contexts/MessagesContext';
 
@@ -10,7 +12,6 @@ export default function useSyncEngine(peerId, sendSyncQuery, deviceId) {
       if (!peerId || !deviceId) return;
 
       const outgoingMessages = messages.filter((msg) => msg.senderId === deviceId);
-
       const syncPayload = {
         deviceId,
         knownStatuses: outgoingMessages.map((m) => ({ id: m.id, status: m.status })),
@@ -18,7 +19,14 @@ export default function useSyncEngine(peerId, sendSyncQuery, deviceId) {
 
       sendSyncQuery(peerId, syncPayload)
         .then((response) => {
-          if (!response || !response.statusUpdates) {
+          if (!response || typeof response !== 'object' || !Array.isArray(response.statusUpdates)) {
+            console.warn('🔴 תגובה לא תקינה מהשרת');
+            setIsSynced(false);
+            return;
+          }
+
+          if (response.peerFound === false) {
+            console.warn('🔴 אין peer מחובר – sync נכשל');
             setIsSynced(false);
             return;
           }
@@ -36,7 +44,7 @@ export default function useSyncEngine(peerId, sendSyncQuery, deviceId) {
           setIsSynced(!updated);
         })
         .catch((err) => {
-          console.warn('🔁 Sync error:', err);
+          console.warn('🔁 שגיאה בשליחת sync:', err);
           setIsSynced(false);
         });
     }, 4000);

@@ -1,4 +1,4 @@
-// ReceivedMessageScreen.js - גרסת בסיס מקורית
+// ReceivedMessageScreen.js - מעודכן לשליחת עדכון סטטוס לשרת
 
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
@@ -26,9 +26,20 @@ export default function ReceivedMessageScreen() {
         status: 'played',
         played: true,
         updatedAt: new Date().toISOString(),
+        source: 'remote',
       };
 
       updateMessage(updated);
+
+      try {
+        fetch('http://192.168.1.227:3000/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated),
+        });
+      } catch (err) {
+        console.warn('🔁 עדכון סטטוס לשרת נכשל:', err);
+      }
     }
   }, [message]);
 
