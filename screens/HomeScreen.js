@@ -1,4 +1,4 @@
-// HomeScreen.js - גרסה מתוקנת: הודעות מוצגות נכון לפי source (local/remote)
+// HomeScreen.js - גרסה מתוקנת: deviceId דינמי מ־AsyncStorage
 
 import React, { useState, useEffect, useRef } from 'react';
 import * as Contacts from 'expo-contacts';
@@ -8,20 +8,25 @@ import { useMessages } from '../contexts/MessagesContext';
 import { Audio } from 'expo-av';
 import useSyncEngine from '../hooks/useSyncEngine';
 import sendSyncQuery from '../utils/sendSyncQuery';
-import playNotificationSound from '../utils/playNotificationSound'
+import playNotificationSound from '../utils/playNotificationSound';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const DEVICE_ID = '123456';
 const PEER_IP = '192.168.1.228';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { messages } = useMessages();
+  const [deviceId, setDeviceId] = useState(null);
   const [contacts, setContacts] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredContacts, setFilteredContacts] = useState([]);
 
-  const { isSynced } = useSyncEngine(PEER_IP, sendSyncQuery);
+  useEffect(() => {
+    AsyncStorage.getItem('deviceId').then(setDeviceId);
+  }, []);
+
+  const { isSynced } = useSyncEngine(PEER_IP, sendSyncQuery, deviceId);
 
   const blinkingOpacity = useRef(new Animated.Value(1)).current;
   const lastSeenId = useRef(null);
@@ -36,23 +41,13 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    if (messages.length === 0) return;
+    if (messages.length === 0 || !deviceId) return;
     const latest = messages[messages.length - 1];
-    if (latest.source === 'remote' && latest.id !== lastSeenId.current) {
-      lastSeenId.current = latest.id;
-      playNotificationSound(); // ✅ זו הפונקציה המיובאת מ־../utils
-    }
-  }, [messages]);
-  
-
-  useEffect(() => {
-    if (messages.length === 0) return;
-    const latest = messages[messages.length - 1];
-    if (latest.source === 'remote' && latest.id !== lastSeenId.current) {
+    if (latest.senderId !== deviceId && latest.id !== lastSeenId.current) {
       lastSeenId.current = latest.id;
       playNotificationSound();
     }
-  }, [messages]);
+  }, [messages, deviceId]);
 
   useEffect(() => {
     (async () => {
@@ -86,16 +81,14 @@ export default function HomeScreen() {
   };
 
   const handleOpenMessage = (message) => {
-    if (message.source === 'remote') {
-      navigation.navigate('ReceivedMessage', { messageId: message.id });
-    } else {
-      navigation.navigate('MessageDetail', { messageId: message.id });
-    }
+    if (!deviceId) return;
+    navigation.navigate(message.senderId === deviceId ? 'MessageDetail' : 'ReceivedMessage', { messageId: message.id });
   };
 
   const renderMessageItem = ({ item }) => {
-    const isBlinking = item.source === 'remote' && item.status !== 'played';
-    const isMine = item.source === 'local';
+    if (!deviceId) return null;
+    const isMine = item.senderId === deviceId;
+    const isBlinking = !isMine && item.status !== 'played';
     const MessageWrapper = isBlinking ? Animated.View : View;
 
     return (
@@ -213,4 +206,3 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   }
 });
- 

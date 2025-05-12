@@ -29,6 +29,19 @@ export default function SettingsScreen() {
     loadSettings();
   }, []);
 
+  useEffect(() => {
+    AsyncStorage.getItem('deviceId').then((savedId) => {
+      if (savedId) setDeviceId(savedId);
+    });
+  }, []);
+  
+  
+  const saveDeviceId = async (id) => {
+    setDeviceId(id);
+    await AsyncStorage.setItem('deviceId', id);
+  };
+  
+
   const saveSetting = async (key, value) => {
     try {
       await AsyncStorage.setItem(key, value.toString());
@@ -42,11 +55,13 @@ export default function SettingsScreen() {
     Alert.alert('נמחק', 'היסטוריית ההודעות נמחקה בהצלחה.');
   };
 
-  const handleResetDeviceId = () => {
+  const handleResetDeviceId = async () => {
     const newId = Math.floor(100000 + Math.random() * 900000).toString();
     setDeviceId(newId);
-    Alert.alert('מזהה חדש', `מזהה המכשיר עודכן ל-${newId}`);
+    await AsyncStorage.setItem('deviceId', newId);
+    Alert.alert('מזהה חדש', `המכשיר שלך: ${newId}`);
   };
+  
 
   const handleTestSound = async () => {
     try {
@@ -81,6 +96,16 @@ export default function SettingsScreen() {
         <TouchableOpacity style={styles.button} onPress={handleResetDeviceId}>
           <Text style={styles.buttonText}>🔄 חדש</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => {
+  setDeviceId('123456');
+  AsyncStorage.setItem('deviceId', '123456');
+  Alert.alert('מזהה עודכן', 'המכשיר הוגדר כ-123456');
+}}>
+  <Text style={{ color: 'skyblue', textAlign: 'center', marginTop: 10 }}>
+    🔙  לברירת מחדל (123456)
+  </Text>
+</TouchableOpacity>
+
       </View>
 
       <Text style={styles.label}>כתובת Peer:</Text>

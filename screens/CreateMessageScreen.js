@@ -1,31 +1,47 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Audio } from 'expo-av';
 import { useMessages } from '../contexts/MessagesContext';
 import * as FileSystem from 'expo-file-system';
-
-const DEVICE_ID = '123456';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CreateMessageScreen() {
   const navigation = useNavigation();
   const { addMessage } = useMessages();
-
   const [shortName, setShortName] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [freeText, setFreeText] = useState('');
+  const [receiverId, setReceiverId] = useState('');
   const [recording, setRecording] = useState(null);
   const [recordingUri, setRecordingUri] = useState('');
   const [audioBase64, setAudioBase64] = useState('');
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [deviceId, setDeviceId] = useState(null);
 
-  const handleSave = () => {
-    addMessage({
+  useEffect(() => {
+    AsyncStorage.getItem('deviceId').then((id) => {
+      setDeviceId(id);
+    });
+  }, []);
+
+  const handleSave = async () => {
+    if (!deviceId) {
+      Alert.alert('שגיאה', 'מזהה מכשיר לא נטען עדיין.');
+      return;
+    }
+    if (!receiverId.trim()) {
+      Alert.alert('שגיאה', 'אנא הזן מזהה מקבל (receiverId)');
+      return;
+    }
+
+    const newMessage = {
       id: String(new Date().getTime()),
-      senderId: DEVICE_ID,
+      senderId: deviceId,
+      receiverId: receiverId.trim(),
       shortName,
       text: freeText || '(ללא טקסט)',
       date,
@@ -36,11 +52,27 @@ export default function CreateMessageScreen() {
       played: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    });
+    };
+
+    addMessage(newMessage);
+
+    try {
+      await fetch('http://192.168.1.227:3000/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMessage),
+      });
+    } catch (err) {
+      console.warn('🔁 שליחה לשרת נכשלה:', err);
+    }
+
+    Alert.alert('✅ הודעה נשמרה', `שם: ${shortName}`);
+
     setShortName('');
     setDate('');
     setTime('');
     setFreeText('');
+    setReceiverId('');
     setRecordingUri('');
     setAudioBase64('');
     navigation.goBack();
@@ -103,6 +135,14 @@ export default function CreateMessageScreen() {
     }
   };
 
+  if (!deviceId) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ textAlign: 'center' }}>🔄 טוען מזהה מכשיר...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>צור הודעה חדשה</Text>
@@ -110,6 +150,7 @@ export default function CreateMessageScreen() {
         <TextInput style={styles.input} value={shortName} onChangeText={setShortName} placeholder="שם ההודעה" />
         <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="תאריך" />
         <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="שעה" />
+        <TextInput style={styles.input} value={receiverId} onChangeText={setReceiverId} placeholder="מזהה מקבל (receiverId)" />
         <TextInput
           style={styles.freeTextBox}
           value={freeText}

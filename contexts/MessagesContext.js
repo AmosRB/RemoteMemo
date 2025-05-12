@@ -1,10 +1,9 @@
-// MessagesContext.js - גרסה מתוקנת עם סינון לפי receiverId
+// MessagesContext.js - גרסה מתוקנת עם טעינת deviceId דינמית
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'remoteMemoMessages';
-const DEVICE_ID = '123456'; // בעתיד נטען מ־Settings או AsyncStorage
 const RELAY_SERVER_URL = 'http://192.168.1.227:3000';
 
 const MessagesContext = createContext();
@@ -12,8 +11,12 @@ export const useMessages = () => useContext(MessagesContext);
 
 export const MessagesProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
+  const [deviceId, setDeviceId] = useState(null);
 
-  useEffect(() => { loadMessages(); }, []);
+  useEffect(() => {
+    AsyncStorage.getItem('deviceId').then(setDeviceId);
+    loadMessages();
+  }, []);
 
   const loadMessages = async () => {
     try {
@@ -33,32 +36,16 @@ export const MessagesProvider = ({ children }) => {
   };
 
   const addMessage = async (newMessage) => {
+    if (!deviceId) return;
+
     let fullMessage = {
       ...newMessage,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      status: 'unread',
-      source: 'local',
-      senderId: DEVICE_ID,
+      createdAt: newMessage.createdAt || new Date().toISOString(),
+      updatedAt: newMessage.updatedAt || new Date().toISOString(),
+      status: newMessage.status || 'unread',
+      source: newMessage.source || (newMessage.senderId === deviceId ? 'local' : 'remote'),
+      senderId: newMessage.senderId || deviceId,
     };
-
-    try {
-      const res = await fetch(`${RELAY_SERVER_URL}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fullMessage),
-      });
-
-      if (res.ok) {
-        fullMessage = {
-          ...fullMessage,
-          status: 'delivered',
-          updatedAt: new Date().toISOString(),
-        };
-      }
-    } catch (err) {
-      console.warn('❌ Failed to send message to relay server:', err);
-    }
 
     const updatedMessages = [...messages, fullMessage];
     setMessages(updatedMessages);
@@ -82,6 +69,8 @@ export const MessagesProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    if (!deviceId) return;
+
     let isActive = true;
 
     const poll = async () => {
@@ -91,8 +80,7 @@ export const MessagesProvider = ({ children }) => {
           const msg = await res.json();
 
           if (msg && msg.id) {
-            // 🔒 בדוק האם הודעה מיועדת למכשיר הנוכחי (או הודעת שליחה עצמית)
-            const isToMe = msg.receiverId === DEVICE_ID || msg.senderId === DEVICE_ID;
+            const isToMe = msg.receiverId === deviceId || msg.senderId === deviceId;
             if (!isToMe) continue;
 
             setMessages((oldMessages) => {
@@ -105,7 +93,7 @@ export const MessagesProvider = ({ children }) => {
                   ...original,
                   ...msg,
                   updatedAt: new Date().toISOString(),
-                  source: original.source || (msg.senderId === DEVICE_ID ? 'local' : 'remote'),
+                  source: original.source || (msg.senderId === deviceId ? 'local' : 'remote'),
                   senderId: original.senderId || msg.senderId,
                 };
                 updatedMessages = [...oldMessages];
@@ -114,24 +102,10 @@ export const MessagesProvider = ({ children }) => {
                 const incoming = {
                   ...msg,
                   senderId: msg.senderId || 'unknown',
-                  source: msg.senderId === DEVICE_ID ? 'local' : 'remote',
+                  source: msg.senderId === deviceId ? 'local' : 'remote',
                   updatedAt: new Date().toISOString(),
                 };
                 updatedMessages = [...oldMessages, incoming];
-
-                if (incoming.source === 'remote') {
-                  fetch(`${RELAY_SERVER_URL}/messages`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      id: msg.id,
-                      status: 'received',
-                      updatedAt: new Date().toISOString(),
-                      senderId: DEVICE_ID,
-                      source: 'remote',
-                    }),
-                  }).catch(err => console.warn('⚠️ Failed to send received status:', err));
-                }
               }
 
               saveMessages(updatedMessages);
@@ -147,7 +121,7 @@ export const MessagesProvider = ({ children }) => {
 
     poll();
     return () => { isActive = false; };
-  }, []);
+  }, [deviceId]);
 
   return (
     <MessagesContext.Provider value={{ messages, addMessage, updateMessage, deleteMessage }}>
