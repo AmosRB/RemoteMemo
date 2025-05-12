@@ -1,10 +1,11 @@
-// MessageDetailScreen.js - תצוגת פסים רק כשסטטוס מתאים (ללא אפורים)
+// MessageDetailScreen.js - כולל שמירת base64 ועדכון סטטוס תקין + played: false
 
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Audio } from 'expo-av';
 import { useMessages } from '../contexts/MessagesContext';
+import * as FileSystem from 'expo-file-system';
 
 export default function MessageDetailScreen() {
   const navigation = useNavigation();
@@ -20,6 +21,7 @@ export default function MessageDetailScreen() {
   const [freeText, setFreeText] = useState(message?.text || '');
   const [recording, setRecording] = useState(null);
   const [recordingUri, setRecordingUri] = useState(message?.audioUri || '');
+  const [audioBase64, setAudioBase64] = useState(message?.audioBase64 || '');
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -32,7 +34,7 @@ export default function MessageDetailScreen() {
     );
   }
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
     const updatedMessage = {
       ...message,
       shortName,
@@ -40,9 +42,28 @@ export default function MessageDetailScreen() {
       time,
       text: freeText,
       audioUri: recordingUri,
+      audioBase64: audioBase64 || message.audioBase64 || null,
+      status: 'unread',
+      played: false, // ✅ איפוס השמעה
       updatedAt: new Date().toISOString(),
     };
+
     updateMessage(updatedMessage);
+
+    try {
+      const res = await fetch('http://192.168.1.227:3000/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedMessage),
+      });
+
+      if (!res.ok) {
+        console.warn('⚠️ השרת החזיר שגיאה:', await res.text());
+      }
+    } catch (err) {
+      console.warn('🔁 שליחת עדכון לשרת נכשלה:', err);
+    }
+
     navigation.goBack();
   };
 
@@ -61,6 +82,13 @@ export default function MessageDetailScreen() {
       const uri = recording.getURI();
       setRecordingUri(uri);
       setRecording(null);
+
+      if (uri) {
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        setAudioBase64(base64);
+      }
     } else {
       try {
         await Audio.requestPermissionsAsync();
@@ -115,7 +143,7 @@ export default function MessageDetailScreen() {
 
   const showBlueLine = ['received', 'played'].includes(message.status);
   const showRedDot = message.status === 'played';
-  const showOrangeLine = message.status === 'activated'; // future only
+  const showOrangeLine = message.status === 'activated';
 
   return (
     <ScrollView contentContainerStyle={styles.container}>

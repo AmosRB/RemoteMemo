@@ -1,12 +1,13 @@
-// screens/SettingsScreen.js
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Switch, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
+import { useMessages } from '../contexts/MessagesContext'; // ✅ נוספה שורה זו
 
 export default function SettingsScreen() {
+  const { clearMessages } = useMessages(); // ✅ שימוש בפונקציה
   const [deviceId, setDeviceId] = useState('123456');
   const [peerIp, setPeerIp] = useState('192.168.1.228');
   const [serverUrl, setServerUrl] = useState('http://192.168.1.227:3000');
@@ -34,6 +35,18 @@ export default function SettingsScreen() {
       if (savedId) setDeviceId(savedId);
     });
   }, []);
+
+  const handleClearHistory = async () => {
+    await clearMessages();
+    Alert.alert('נמחק', 'היסטוריית ההודעות נמחקה בהצלחה.');
+  };
+
+  const handleResetDeviceId = async () => {
+    const newId = Math.floor(100000 + Math.random() * 900000).toString();
+    setDeviceId(newId);
+    await AsyncStorage.setItem('deviceId', newId);
+    Alert.alert('מזהה חדש', `המכשיר שלך: ${newId}`);
+  };
   
   
   const saveDeviceId = async (id) => {
@@ -50,17 +63,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleClearHistory = async () => {
-    await AsyncStorage.removeItem('remoteMemoMessages');
-    Alert.alert('נמחק', 'היסטוריית ההודעות נמחקה בהצלחה.');
-  };
 
-  const handleResetDeviceId = async () => {
-    const newId = Math.floor(100000 + Math.random() * 900000).toString();
-    setDeviceId(newId);
-    await AsyncStorage.setItem('deviceId', newId);
-    Alert.alert('מזהה חדש', `המכשיר שלך: ${newId}`);
-  };
   
 
   const handleTestSound = async () => {

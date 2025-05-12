@@ -20,7 +20,7 @@ export default function ReceivedMessageScreen() {
   const message = useMessages().messages.find((m) => m.id === messageId);
 
   useEffect(() => {
-    if (message && message.status !== 'played') {
+    if (message && message.source === 'remote' && !message.played) {
       const updated = {
         ...message,
         status: 'played',
@@ -28,9 +28,9 @@ export default function ReceivedMessageScreen() {
         updatedAt: new Date().toISOString(),
         source: 'remote',
       };
-
+  
       updateMessage(updated);
-
+  
       try {
         fetch('http://192.168.1.227:3000/messages', {
           method: 'POST',
@@ -42,6 +42,7 @@ export default function ReceivedMessageScreen() {
       }
     }
   }, [message]);
+  
 
   if (!message) {
     return (

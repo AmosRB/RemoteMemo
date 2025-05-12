@@ -1,4 +1,4 @@
-// MessagesContext.js - גרסה מתוקנת עם טעינת deviceId דינמית
+// MessagesContext.js – כולל clearMessages
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -68,6 +68,15 @@ export const MessagesProvider = ({ children }) => {
     saveMessages(updatedMessages);
   };
 
+  const clearMessages = async () => {
+    setMessages([]);
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEY);
+    } catch (err) {
+      console.error('⚠️ Failed to clear messages:', err);
+    }
+  };
+
   useEffect(() => {
     if (!deviceId) return;
 
@@ -103,6 +112,7 @@ export const MessagesProvider = ({ children }) => {
                   ...msg,
                   senderId: msg.senderId || 'unknown',
                   source: msg.senderId === deviceId ? 'local' : 'remote',
+                  played: false,
                   updatedAt: new Date().toISOString(),
                 };
                 updatedMessages = [...oldMessages, incoming];
@@ -124,7 +134,9 @@ export const MessagesProvider = ({ children }) => {
   }, [deviceId]);
 
   return (
-    <MessagesContext.Provider value={{ messages, addMessage, updateMessage, deleteMessage }}>
+    <MessagesContext.Provider value={{
+      messages, addMessage, updateMessage, deleteMessage, clearMessages
+    }}>
       {children}
     </MessagesContext.Provider>
   );
