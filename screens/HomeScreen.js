@@ -1,23 +1,21 @@
-// HomeScreen.js – נורית עם שלושה מצבים: אדום (ברירת מחדל), צהוב זמני, ירוק על סנכרון מלא
-
 import React, { useState, useEffect, useRef } from 'react';
 import * as Contacts from 'expo-contacts';
 import { View, Text, FlatList, TextInput, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useMessages } from '../contexts/MessagesContext';
 import { Audio } from 'expo-av';
-import useSyncEngine from '../hooks/useSyncEngine';
 import sendSyncQuery from '../utils/sendSyncQuery';
 import playNotificationSound from '../utils/playNotificationSound';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import useLedgerSync from '../hooks/useLedgerSync';
 import sendLedgerQuery from '../utils/sendLedgerQuery';
 import requestMissingMessage from '../utils/requestMissingMessage';
+import createAppSyncLayer from '../utils/AppSyncLayer';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
   const flatListRef = useRef(null);
-  const { messages } = useMessages();
+  const { messages, updateMessage, logSyncEvent } = useMessages();
   const [deviceId, setDeviceId] = useState(null);
   const [peerIp, setPeerIp] = useState(null);
   const [contacts, setContacts] = useState([]);
@@ -25,37 +23,63 @@ export default function HomeScreen() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredContacts, setFilteredContacts] = useState([]);
   const [syncLedgers, setSyncLedgers] = useState(() => () => {});
-  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle', 'syncing', 'ok'
+  const [syncStatus, setSyncStatus] = useState('idle');
+  const [peerOnline, setPeerOnline] = useState(false);
   const blinkingOpacity = useRef(new Animated.Value(1)).current;
   const lastSeenId = useRef(null);
+  
 
   useEffect(() => {
-    AsyncStorage.getItem('deviceId').then(id => setDeviceId(id));
     AsyncStorage.getItem('peerIp').then(ip => {
       const resolvedIp = ip || '192.168.1.227';
       setPeerIp(resolvedIp);
-      const { syncLedgers } = useLedgerSync(resolvedIp, sendLedgerQuery, requestMissingMessage, setSyncStatus);
-      setSyncLedgers(() => syncLedgers);
     });
+    
   }, []);
 
-  useSyncEngine(peerIp, sendSyncQuery, deviceId, setSyncStatus);
-
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (flatListRef.current) {
-        flatListRef.current.scrollToEnd({ animated: true });
-      }
-    }, 60000);
-    return () => clearInterval(interval);
-  }, []);
-  
-  useEffect(() => {
-    if (flatListRef.current) {
-      flatListRef.current.scrollToEnd({ animated: true });
+    if (peerIp) {
+      const { syncLedgers } = useLedgerSync(peerIp, sendLedgerQuery, requestMissingMessage, setSyncStatus);
+      setSyncLedgers(() => syncLedgers);
     }
-  }, [messages]);
+  }, [peerIp]);
   
+
+  useEffect(() => {
+    const checkPeer = async () => {
+      try {
+        const res = await fetch(`http://${peerIp}:3000/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceId })
+        });
+        const data = await res.json();
+        setPeerOnline(data.peerFound === true);
+      } catch (err) {
+        setPeerOnline(false);
+      }
+    };
+
+    const syncAppLayer = async () => {
+      try {
+        const ctx = { messages, updateMessage, logSyncEvent };
+        const appSync = createAppSyncLayer(ctx, peerIp, deviceId);
+        await appSync.syncWithPeer();
+      } catch (err) {
+        console.warn('🔁 סנכרון BbSp נכשל:', err);
+      }
+    };
+
+    const interval = setInterval(() => {
+      if (peerIp && deviceId) {
+        checkPeer();
+        syncAppLayer();
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [peerIp, deviceId, messages]);
+
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -65,6 +89,13 @@ export default function HomeScreen() {
     ).start();
   }, []);
 
+  const getSyncStyle = () => {
+    if (peerOnline && syncStatus !== 'ok') return { ...styles.yellow, opacity: blinkingOpacity };
+    if (!peerOnline) return styles.yellow;
+    if (syncStatus === 'ok') return styles.green;
+    return styles.red;
+  };
+
   useEffect(() => {
     if (messages.length === 0 || !deviceId) return;
     const latest = messages[messages.length - 1];
@@ -73,6 +104,7 @@ export default function HomeScreen() {
       playNotificationSound();
     }
   }, [messages, deviceId]);
+  
 
   useEffect(() => {
     (async () => {
@@ -102,14 +134,6 @@ export default function HomeScreen() {
     }
   };
 
-  const getSyncStyle = () => {
-    switch (syncStatus) {
-      case 'syncing': return styles.yellow;  // ⏳ מצב ביניים = יופיע כצהוב (במקום אדום קודם)
-      case 'ok':      return styles.green;   // ✅
-      default:        return styles.red;     // ❌ אין peer / אין תקשורת – עכשיו אדום ← הוחלף מצהוב
-    }
-  };
-  
 
   const handleSearch = (text) => {
     setSearchTerm(text);
@@ -135,49 +159,31 @@ export default function HomeScreen() {
     navigation.navigate(message.senderId === deviceId ? 'MessageDetail' : 'ReceivedMessage', { messageId: message.id });
   };
 
-
   const renderMessageItem = ({ item }) => {
     if (!deviceId) return null;
-  
     const isMine = item.senderId === deviceId;
     const isIncoming = !isMine;
     const isBlinking = isIncoming && !['played', 'alert triggered', 'read', 'deleted_by_peer'].includes(item.status);
     const MessageWrapper = isBlinking ? Animated.View : View;
-    
-  
     const isDeletedByPeer = item.status === 'deleted_by_peer';
-  
+
     return (
       <TouchableOpacity onPress={() => handleOpenMessage(item)}>
         <MessageWrapper
-          style={[
-            styles.messageBox,
+          style={[styles.messageBox,
             isMine ? styles.outgoing : styles.incoming,
             styles.messageShadow,
             isDeletedByPeer && { opacity: 0.5 },
             isBlinking && { opacity: blinkingOpacity },
           ]}
         >
-{isMine && (
-  <View style={styles.statusBarContainer}>
-    {['delivered', 'received', 'played', 'alert triggered'].includes(item.status) && (
-  <View style={styles.statusLineBlue} />
-)}
-
-{['played', 'alert triggered'].includes(item.status) && (
-  <View style={styles.statusDotRed} />
-)}
-{item.status === 'alert triggered' && (
-  <View style={styles.statusLineOrange} />
-)}
-
-  </View>
-)}
-
-
-
-
-  
+          {isMine && (
+            <View style={styles.statusBarContainer}>
+              {['delivered', 'received', 'played', 'alert triggered'].includes(item.status) && <View style={styles.statusLineBlue} />}
+              {['played', 'alert triggered'].includes(item.status) && <View style={styles.statusDotRed} />}
+              {item.status === 'alert triggered' && <View style={styles.statusLineOrange} />}
+            </View>
+          )}
           <View>
             <Text style={styles.messageTitle}>{item.shortName}</Text>
             <Text style={styles.messageSubtitle}>תזכורת {item.shortName} [{item.date} {item.time}]</Text>
@@ -187,17 +193,18 @@ export default function HomeScreen() {
       </TouchableOpacity>
     );
   };
-  
-  
 
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-
         <View style={styles.rowWithIndicator}>
-          <TouchableOpacity onPress={manualSync}>
-            <View style={[styles.syncIndicator, getSyncStyle()]} />
-          </TouchableOpacity>
+        <TouchableOpacity onPress={manualSync}>
+  {peerOnline && syncStatus !== 'ok' ? (
+    <Animated.View style={[styles.syncIndicator, styles.yellow, { opacity: blinkingOpacity }]} />
+  ) : (
+    <View style={[styles.syncIndicator, getSyncStyle() || {}]} />
+  )}
+</TouchableOpacity>
 
           {selectedContact ? (
             <TouchableOpacity onPress={handleReselect}>
@@ -213,7 +220,6 @@ export default function HomeScreen() {
             />
           )}
         </View>
-
         {filteredContacts.length > 0 && !selectedContact && (
           <FlatList
             data={filteredContacts}
@@ -227,16 +233,13 @@ export default function HomeScreen() {
           />
         )}
       </View>
-
       <FlatList
-  ref={flatListRef}
-  data={messages}
-  keyExtractor={(item) => item.id}
-  contentContainerStyle={{ paddingBottom: 80 }}
-  renderItem={renderMessageItem}
-/>
-
-
+        ref={flatListRef}
+        data={messages}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingBottom: 80 }}
+        renderItem={renderMessageItem}
+      />
       <TouchableOpacity style={styles.bottomButton} onPress={() => navigation.navigate('CreateMessage')}>
         <Text style={styles.bottomButtonText}>הודעה חדשה</Text>
       </TouchableOpacity>
@@ -272,6 +275,8 @@ const styles = StyleSheet.create({
   green: { backgroundColor: 'green' },
   red: { backgroundColor: 'red' },
   yellow: { backgroundColor: 'yellow' },
+  purple: { backgroundColor: 'purple' },
+
   messageTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 1, textAlign: 'right' },
   messageSubtitle: { fontSize: 11, color: '#555', textAlign: 'right' },
   messageContent: { fontSize: 12, color: '#888', marginTop: 2, textAlign: 'right' },

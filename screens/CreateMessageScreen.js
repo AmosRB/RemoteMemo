@@ -24,13 +24,17 @@ export default function CreateMessageScreen() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [deviceId, setDeviceId] = useState(null);
+  const [imageBase64, setImageBase64] = useState('');
+const [videoBase64, setVideoBase64] = useState('');
 
-  useEffect(() => {
-    AsyncStorage.getItem('deviceId').then((id) => {
-      setDeviceId(id);
-      console.log('📱 Device ID:', id);
-    });
-  }, []);
+
+useEffect(() => {
+  AsyncStorage.getItem('deviceId').then((id) => setDeviceId(id));
+  AsyncStorage.getItem('connectedNumber').then((val) => {
+    setReceiverId(val || '');
+  });
+}, []);
+
 
   const handleSave = async () => {
     console.log('📤 handleSave started');
@@ -67,6 +71,8 @@ export default function CreateMessageScreen() {
       date,
       time,
       audioBase64: audioBase64 || null,
+      imageBase64: imageBase64 || null,   
+      videoBase64: videoBase64 || null,   
       source: 'local',
       status,
       played: false,
@@ -74,6 +80,7 @@ export default function CreateMessageScreen() {
       updatedAt: new Date().toISOString(),
       hash,
     };
+    
 
     console.log('📝 New message created:', newMessage);
 
@@ -179,7 +186,8 @@ export default function CreateMessageScreen() {
         <TextInput style={styles.input} value={shortName} onChangeText={setShortName} placeholder="שם ההודעה" />
         <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="תאריך" />
         <TextInput style={styles.input} value={time} onChangeText={setTime} placeholder="שעה" />
-        <TextInput style={styles.input} value={receiverId} onChangeText={setReceiverId} placeholder="מזהה מקבל (receiverId)" />
+        <Text style={{ fontSize: 16, marginBottom: 10 }}>מספר מחובר: {receiverId || 'לא הוגדר'}</Text>
+
         <TextInput
           style={styles.freeTextBox}
           value={freeText}

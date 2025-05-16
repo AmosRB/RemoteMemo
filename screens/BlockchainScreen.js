@@ -1,4 +1,4 @@
-// BlockchainScreen.js – תצוגה גרפית של ה־TRUST Ledger עם תיקון VirtualizedLists
+// BlockchainScreen.js – תצוגה גרפית של ה־TRUST Ledger עם לוג ל-forceSync
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
@@ -6,26 +6,46 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function BlockchainScreen() {
   const [blocks, setBlocks] = useState([]);
+  const [lastForceSync, setLastForceSync] = useState(null);
 
   useEffect(() => {
     const loadBlocks = async () => {
       try {
         const stored = await AsyncStorage.getItem('trustBlocks');
-        console.log('🧱 תוכן trustBlocks:', stored);
         const parsed = stored ? JSON.parse(stored) : [];
-        console.log('🔢 מספר בלוקים שנמצאו:', parsed.length);
         setBlocks(parsed.reverse());
       } catch (err) {
         console.warn('⚠️ Failed to load blocks:', err);
       }
     };
 
+    const loadForceSyncLog = async () => {
+      try {
+        const logs = await AsyncStorage.getItem('syncLogs');
+        if (logs) {
+          const parsed = JSON.parse(logs);
+          const forceEntries = parsed.filter(e => e.reason === 'block mismatch');
+          if (forceEntries.length > 0) {
+            const last = forceEntries[forceEntries.length - 1];
+            setLastForceSync(last.localTime || last.timestamp);
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Failed to load sync logs:', err);
+      }
+    };
+
     loadBlocks();
+    loadForceSyncLog();
   }, []);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>📘 TRUST Blockchain</Text>
+
+      {lastForceSync && (
+        <Text style={styles.alert}>⚠️ בוצע Force Sync עקב אי התאמה: {lastForceSync}</Text>
+      )}
 
       {blocks.length === 0 && (
         <Text style={styles.empty}>⚠️ אין בלוקים להצגה</Text>
@@ -60,6 +80,7 @@ export default function BlockchainScreen() {
 const styles = StyleSheet.create({
   container: { padding: 16, backgroundColor: '#eef2f5' },
   title: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 20, color: '#003366' },
+  alert: { fontSize: 14, color: '#cc0000', fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
   empty: { textAlign: 'center', color: '#888', fontSize: 16, marginTop: 20 },
   blockContainer: { backgroundColor: '#fff', padding: 14, marginBottom: 20, borderRadius: 8, elevation: 3 },
   blockHeader: { fontSize: 16, fontWeight: 'bold', marginBottom: 10, color: '#1a1a1a' },

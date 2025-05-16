@@ -1,3 +1,5 @@
+// SettingsScreen.js – גרסה מעודכנת עם סטטוס peer
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Switch, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
@@ -17,6 +19,12 @@ export default function SettingsScreen() {
   const [notificationSound, setNotificationSound] = useState('notification');
   const [messageExpiryHours, setMessageExpiryHours] = useState('24');
   const [notificationVolume, setNotificationVolume] = useState(1.0);
+  const [connectedNumber, setConnectedNumber] = useState('');
+  const [peerStatus, setPeerStatus] = useState('unknown');
+
+  useEffect(() => {
+    AsyncStorage.getItem('connectedNumber').then((val) => val && setConnectedNumber(val));
+  }, []);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -33,10 +41,29 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => {
-    AsyncStorage.getItem('deviceId').then((savedId) => {
-      if (savedId) setDeviceId(savedId);
-    });
+    AsyncStorage.getItem('deviceId').then((savedId) => savedId && setDeviceId(savedId));
   }, []);
+
+  const checkPeerConnection = async () => {
+    try {
+      const res = await fetch(`http://${peerIp}:3000/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId })
+      });
+      const data = await res.json();
+      setPeerStatus(data.peerFound ? 'connected' : 'not found');
+    } catch (err) {
+      setPeerStatus('error');
+    }
+  };
+
+  const getPeerStatusText = () => {
+    if (peerStatus === 'connected') return '🟢 Peer מחובר';
+    if (peerStatus === 'not found') return '🟡 Peer לא נמצא';
+    if (peerStatus === 'error') return '🔴 שגיאה בגישה ל־Peer';
+    return '...';
+  };
 
   const handleClearHistory = async () => {
     await clearMessages();
@@ -92,60 +119,89 @@ export default function SettingsScreen() {
         <TouchableOpacity style={styles.button} onPress={handleResetDeviceId}>
           <Text style={styles.buttonText}>🔄 חדש</Text>
         </TouchableOpacity>
-        <TextInput style={styles.input} value={deviceId} onChangeText={setDeviceId} />
+        <TextInput
+  style={styles.input}
+  value={deviceId}
+  onChangeText={(val) => {
+    setDeviceId(val);
+    AsyncStorage.setItem('deviceId', val); // 💾 שמירה מידית
+  }}
+/>
+
       </View>
 
+      <Text style={styles.label}>מספר מחובר (יעד):</Text>
+      <TextInput
+        style={styles.input}
+        value={connectedNumber}
+        onChangeText={(val) => {
+          setConnectedNumber(val);
+          AsyncStorage.setItem('connectedNumber', val);
+        }}
+        placeholder="הכנס מספר יעד "
+      />
+
       <Text style={styles.label}>כתובת Peer:</Text>
-      <TextInput style={styles.input} value={peerIp} onChangeText={setPeerIp} />
+      <TextInput
+  style={styles.input}
+  value={peerIp}
+  onChangeText={(val) => {
+    setPeerIp(val);
+    AsyncStorage.setItem('peerIp', val);
+  }}
+/>
+
+
+      <TouchableOpacity onPress={checkPeerConnection} style={{ marginTop: 10 }}>
+        <Text style={{ color: '#00ccff' }}>🔄 בדוק חיבור ל־Peer</Text>
+      </TouchableOpacity>
+
+      <Text style={{ color: '#ccc', fontSize: 16, marginTop: 8 }}>{getPeerStatusText()}</Text>
 
       <Text style={styles.label}>כתובת Relay Server:</Text>
       <TextInput style={styles.input} value={serverUrl} onChangeText={setServerUrl} />
 
       <TouchableOpacity style={[styles.button, { marginTop: 12 }]} onPress={() => navigation.navigate('Journal')}>
-  <Text style={styles.buttonText}>📘 יומן TRUST</Text>
-</TouchableOpacity>
+        <Text style={styles.buttonText}>📘 יומן TRUST</Text>
+      </TouchableOpacity>
 
-<TouchableOpacity style={[styles.button, { marginTop: 8 }]} onPress={() => navigation.navigate('Blockchain')}>
-  <Text style={styles.buttonText}>⛓️ הצג Blockchain</Text>
-</TouchableOpacity>
+      <TouchableOpacity style={[styles.button, { marginTop: 8 }]} onPress={() => navigation.navigate('Blockchain')}>
+        <Text style={styles.buttonText}>⛓️ הצג Blockchain</Text>
+      </TouchableOpacity>
 
-<TouchableOpacity
-  style={styles.button}
-  onPress={async () => {
-    try {
-      const logs = await AsyncStorage.getItem('debugLogs');
-      if (logs) {
-        const parsed = JSON.parse(logs);
-        if (!Array.isArray(parsed) || parsed.length === 0) {
-          Alert.alert('Debug Logs', 'אין לוגים להצגה.');
-          return;
-        }
-
-        const display = parsed
-          .map(e => {
-            const time = e.timestamp || '⏱️';
-            const act = e.action || 'ACTION';
-            const src = e.source ? `[${e.source}]` : '';
-            const msg = e.message || '—';
-            return `${time} | ${src} ${act}: ${msg}`;
-          })
-          .join('\n\n')
-          .slice(0, 1000); // קיצור כדי לא להפיל את Alert
-
-        Alert.alert('Debug Logs', display);
-      } else {
-        Alert.alert('Debug Logs', 'אין לוגים זמינים.');
-      }
-    } catch (err) {
-      Alert.alert('Debug Logs', 'שגיאה בקריאת הלוגים.');
-      console.warn('⚠️ Failed to read debug logs:', err);
-    }
-  }}
->
-  <Text style={styles.buttonText}>🪵 הצג Debug Logs</Text>
-</TouchableOpacity>
-
-
+      <TouchableOpacity
+        style={styles.button}
+        onPress={async () => {
+          try {
+            const logs = await AsyncStorage.getItem('debugLogs');
+            if (logs) {
+              const parsed = JSON.parse(logs);
+              if (!Array.isArray(parsed) || parsed.length === 0) {
+                Alert.alert('Debug Logs', 'אין לוגים להצגה.');
+                return;
+              }
+              const display = parsed
+                .map(e => {
+                  const time = e.timestamp || '⏱️';
+                  const act = e.action || 'ACTION';
+                  const src = e.source ? `[${e.source}]` : '';
+                  const msg = e.message || '—';
+                  return `${time} | ${src} ${act}: ${msg}`;
+                })
+                .join('\n\n')
+                .slice(0, 1000);
+              Alert.alert('Debug Logs', display);
+            } else {
+              Alert.alert('Debug Logs', 'אין לוגים זמינים.');
+            }
+          } catch (err) {
+            Alert.alert('Debug Logs', 'שגיאה בקריאת הלוגים.');
+            console.warn('⚠️ Failed to read debug logs:', err);
+          }
+        }}
+      >
+        <Text style={styles.buttonText}>🪵 הצג Debug Logs</Text>
+      </TouchableOpacity>
 
       <View style={[styles.rowGroup, { marginTop: 16, justifyContent: 'space-between', backgroundColor: '#111', padding: 10, borderRadius: 6, height: 40 }]}>
         <Text style={[styles.label, { marginTop: 0 }]}>🔔 השמעת התראות:</Text>
