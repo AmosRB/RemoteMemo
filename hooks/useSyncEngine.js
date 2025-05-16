@@ -1,62 +1,51 @@
 import { useEffect, useState } from 'react';
 import { useMessages } from '../contexts/MessagesContext';
 
-export default function useSyncEngine(peerId, sendSyncQuery, deviceId) {
+export default function useSyncEngine(peerIp, sendSyncQuery, deviceId) {
   const { messages, updateMessage } = useMessages();
   const [isSynced, setIsSynced] = useState(true);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!peerId || !deviceId) return;
+      if (!peerIp || !deviceId) return;
 
-      const outgoingMessages = messages.filter((msg) => msg.senderId === deviceId);
-      const unsentMessages = outgoingMessages.filter((msg) => msg.status === 'unread');
+      // שולח את כל הסטטוסים של הודעות ששלח או קיבל
+      const knownStatuses = messages
+        .filter((msg) => msg.senderId === deviceId || msg.receiverId === deviceId)
+        .map((m) => ({ id: m.id, status: m.status }));
 
-      // שליחה מחדש של הודעות שלא נשלחו
-      unsentMessages.forEach(async (msg) => {
-        try {
-          const res = await fetch(`http://${peerId}:3000/messages`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(msg),
-          });
+      const syncPayload = { deviceId, knownStatuses };
 
-          if (!res.ok) {
-            console.warn('⚠️ שגיאה בשליחה מחדש:', await res.text());
-          } else {
-            console.log('🟢 נשלחה מחדש:', msg.shortName);
-          }
-        } catch (err) {
-          console.warn('🔴 שגיאה בשליחה מחדש:', err.message);
-        }
-      });
+      console.log('📤 Sending sync to peer:', peerIp);
+      console.log('📦 Known statuses:', knownStatuses);
 
-      // סנכרון סטטוסים רגיל
-      const syncPayload = {
-        deviceId,
-        knownStatuses: outgoingMessages.map((m) => ({ id: m.id, status: m.status })),
-      };
-
-      sendSyncQuery(peerId, syncPayload)
+      sendSyncQuery(peerIp, syncPayload)
         .then((response) => {
           if (!response || typeof response !== 'object' || !Array.isArray(response.statusUpdates)) {
-            console.warn('🔴 תגובה לא תקינה מהשרת');
+            console.warn('🔴 תגובה לא תקינה מה-peer');
             setIsSynced(false);
             return;
           }
 
           if (response.peerFound === false) {
-            console.warn('🔴 אין peer מחובר – sync נכשל');
+            console.warn('🔴 peer לא מחובר – sync נכשל');
             setIsSynced(false);
             return;
           }
+
+          console.log('📨 Received statusUpdates:', response.statusUpdates);
 
           let updated = false;
 
           response.statusUpdates.forEach((incomingStatus) => {
             const localMsg = messages.find((m) => m.id === incomingStatus.id);
             if (localMsg && localMsg.status !== incomingStatus.status) {
-              updateMessage({ ...localMsg, status: incomingStatus.status });
+              console.log(`✅ Updating message ${localMsg.id} from ${localMsg.status} → ${incomingStatus.status}`);
+              updateMessage({
+                ...localMsg,
+                status: incomingStatus.status,
+                updatedAt: new Date().toISOString(),
+              });
               updated = true;
             }
           });
@@ -67,10 +56,10 @@ export default function useSyncEngine(peerId, sendSyncQuery, deviceId) {
           console.warn('🔁 שגיאה בשליחת sync:', err);
           setIsSynced(false);
         });
-    }, 4000);
+    }, 4000); // מריץ כל 4 שניות
 
     return () => clearInterval(interval);
-  }, [messages, peerId, deviceId]);
+  }, [messages, peerIp, deviceId]);
 
   return { isSynced };
 }

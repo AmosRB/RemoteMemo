@@ -9,6 +9,8 @@ import CreateMessageScreen from './screens/CreateMessageScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ReceivedMessageScreen from './screens/ReceivedMessageScreen';
 import { MessagesProvider } from './contexts/MessagesContext';
+import BlockchainScreen from './screens/BlockchainScreen';
+
 
 const Stack = createStackNavigator();
 
@@ -40,6 +42,8 @@ export default function App() {
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="MessageDetail" component={MessageDetailScreen} />
           <Stack.Screen name="Journal" component={JournalScreen} />
+          <Stack.Screen name="Blockchain" component={BlockchainScreen} />
+
           <Stack.Screen name="CreateMessage" component={CreateMessageScreen} />
           <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Screen name="ReceivedMessage" component={ReceivedMessageScreen} />

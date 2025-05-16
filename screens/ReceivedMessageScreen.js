@@ -1,5 +1,3 @@
-// ReceivedMessageScreen.js - מעודכן לשליחת עדכון סטטוס לשרת
-
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Audio } from 'expo-av';
@@ -10,17 +8,17 @@ import * as FileSystem from 'expo-file-system';
 export default function ReceivedMessageScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const { updateMessage, deleteMessage } = useMessages();
+  const { updateMessage, deleteMessage, messages } = useMessages();
   const { messageId } = route.params;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [sound, setSound] = useState(null);
   const [progress, setProgress] = useState(0);
 
-  const message = useMessages().messages.find((m) => m.id === messageId);
+  const message = messages.find((m) => m.id === messageId);
 
   useEffect(() => {
-    if (message && message.source === 'remote' && !message.played) {
+    if (message && message.status !== 'played') {
       const updated = {
         ...message,
         status: 'played',
@@ -28,29 +26,25 @@ export default function ReceivedMessageScreen() {
         updatedAt: new Date().toISOString(),
         source: 'remote',
       };
-  
-      updateMessage(updated);
-  
-      try {
-        fetch('http://192.168.1.227:3000/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updated),
-        });
-      } catch (err) {
-        console.warn('🔁 עדכון סטטוס לשרת נכשל:', err);
-      }
+
+      (async () => {
+        try {
+          await updateMessage(updated);
+          console.log('✅ Message marked as played locally:', updated.id);
+
+          const res = await fetch('http://192.168.1.227:3000/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updated),
+          });
+
+          console.log('📡 played sent to relay, status:', res.status);
+        } catch (err) {
+          console.warn('🔁 עדכון סטטוס לשרת נכשל:', err);
+        }
+      })();
     }
   }, [message]);
-  
-
-  if (!message) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.content}>הודעה לא נמצאה</Text>
-      </View>
-    );
-  }
 
   const playAudio = async () => {
     try {
@@ -89,12 +83,29 @@ export default function ReceivedMessageScreen() {
     navigation.goBack();
   };
 
+  if (!message) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.content}>הודעה לא נמצאה</Text>
+      </View>
+    );
+  }
+
+  const statusText =
+    message.status === 'played'
+      ? 'סטטוס: הושמע'
+      : message.status === 'received'
+      ? 'סטטוס: התקבלה'
+      : 'סטטוס: ממתינה';
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>📥 הודעה</Text>
 
       <Text style={styles.label}>שם ההודעה:</Text>
       <Text style={styles.content}>{message.shortName}</Text>
+
+      <Text style={styles.statusLine}>{statusText}</Text>
 
       <Text style={styles.label}>תוכן ההודעה:</Text>
       <Text style={styles.content}>{message.text}</Text>
@@ -125,6 +136,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
   label: { fontSize: 16, fontWeight: 'bold', marginTop: 10, textAlign: 'right' },
   content: { fontSize: 16, marginBottom: 10, textAlign: 'right' },
+  statusLine: { fontSize: 14, marginBottom: 8, textAlign: 'right', color: '#007aff' },
   playButton: { backgroundColor: '#007aff', padding: 12, borderRadius: 8, alignItems: 'center', marginVertical: 10 },
   playButtonText: { color: '#fff', fontSize: 16 },
   deleteButton: { backgroundColor: 'red', padding: 12, borderRadius: 8, alignItems: 'center', marginVertical: 10 },

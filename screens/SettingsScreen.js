@@ -4,10 +4,12 @@ import { Picker } from '@react-native-picker/picker';
 import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
-import { useMessages } from '../contexts/MessagesContext'; // ✅ נוספה שורה זו
+import { useNavigation } from '@react-navigation/native';
+import { useMessages } from '../contexts/MessagesContext';
 
 export default function SettingsScreen() {
-  const { clearMessages } = useMessages(); // ✅ שימוש בפונקציה
+  const navigation = useNavigation();
+  const { clearMessages } = useMessages();
   const [deviceId, setDeviceId] = useState('123456');
   const [peerIp, setPeerIp] = useState('192.168.1.228');
   const [serverUrl, setServerUrl] = useState('http://192.168.1.227:3000');
@@ -47,13 +49,6 @@ export default function SettingsScreen() {
     await AsyncStorage.setItem('deviceId', newId);
     Alert.alert('מזהה חדש', `המכשיר שלך: ${newId}`);
   };
-  
-  
-  const saveDeviceId = async (id) => {
-    setDeviceId(id);
-    await AsyncStorage.setItem('deviceId', id);
-  };
-  
 
   const saveSetting = async (key, value) => {
     try {
@@ -63,23 +58,15 @@ export default function SettingsScreen() {
     }
   };
 
-
-  
-
   const handleTestSound = async () => {
     try {
       let soundFile;
       switch (notificationSound) {
-        case 'ping':
-          soundFile = require('../assets/notification-ping.mp3'); break;
-        case 'odd':
-          soundFile = require('../assets/ODD.mp3'); break;
-        case 'chime':
-          soundFile = require('../assets/opening-apps-sond5.mp3'); break;
-        case 'short':
-          soundFile = require('../assets/funny-cat.mp3'); break;
-        default:
-          soundFile = require('../assets/notification.mp3');
+        case 'ping': soundFile = require('../assets/notification-ping.mp3'); break;
+        case 'odd': soundFile = require('../assets/ODD.mp3'); break;
+        case 'chime': soundFile = require('../assets/opening-apps-sond5.mp3'); break;
+        case 'short': soundFile = require('../assets/funny-cat.mp3'); break;
+        default: soundFile = require('../assets/notification.mp3');
       }
       const { sound } = await Audio.Sound.createAsync(soundFile);
       await sound.setVolumeAsync(notificationVolume);
@@ -94,21 +81,18 @@ export default function SettingsScreen() {
       <Text style={styles.sectionTitle}>🔧 הגדרות מערכת</Text>
 
       <Text style={styles.label}>מזהה מכשיר:</Text>
-      <View style={styles.rowGroup}>
-        <TextInput style={styles.input} value={deviceId} onChangeText={setDeviceId} />
+      <View style={[styles.rowGroup, { justifyContent: 'flex-end', gap: 8 }]}>
+        <TouchableOpacity onPress={() => {
+          setDeviceId('123456');
+          AsyncStorage.setItem('deviceId', '123456');
+          Alert.alert('מזהה עודכן', 'המכשיר הוגדר כ-123456');
+        }}>
+          <Text style={{ color: 'skyblue' }}>🔙</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={handleResetDeviceId}>
           <Text style={styles.buttonText}>🔄 חדש</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => {
-  setDeviceId('123456');
-  AsyncStorage.setItem('deviceId', '123456');
-  Alert.alert('מזהה עודכן', 'המכשיר הוגדר כ-123456');
-}}>
-  <Text style={{ color: 'skyblue', textAlign: 'center', marginTop: 10 }}>
-    🔙  לברירת מחדל (123456)
-  </Text>
-</TouchableOpacity>
-
+        <TextInput style={styles.input} value={deviceId} onChangeText={setDeviceId} />
       </View>
 
       <Text style={styles.label}>כתובת Peer:</Text>
@@ -117,26 +101,74 @@ export default function SettingsScreen() {
       <Text style={styles.label}>כתובת Relay Server:</Text>
       <TextInput style={styles.input} value={serverUrl} onChangeText={setServerUrl} />
 
-      <Text style={styles.label}>🔔 השמעת התראות:</Text>
-      <Switch
-        value={notificationsEnabled}
-        onValueChange={(val) => {
-          setNotificationsEnabled(val);
-          saveSetting('notificationsEnabled', val);
-        }}
-        trackColor={{ false: '#777', true: '#00ccff' }}
-        thumbColor={notificationsEnabled ? '#ffffff' : '#ccc'}
-      />
+      <TouchableOpacity style={[styles.button, { marginTop: 12 }]} onPress={() => navigation.navigate('Journal')}>
+  <Text style={styles.buttonText}>📘 יומן TRUST</Text>
+</TouchableOpacity>
+
+<TouchableOpacity style={[styles.button, { marginTop: 8 }]} onPress={() => navigation.navigate('Blockchain')}>
+  <Text style={styles.buttonText}>⛓️ הצג Blockchain</Text>
+</TouchableOpacity>
+
+<TouchableOpacity
+  style={styles.button}
+  onPress={async () => {
+    try {
+      const logs = await AsyncStorage.getItem('debugLogs');
+      if (logs) {
+        const parsed = JSON.parse(logs);
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          Alert.alert('Debug Logs', 'אין לוגים להצגה.');
+          return;
+        }
+
+        const display = parsed
+          .map(e => {
+            const time = e.timestamp || '⏱️';
+            const act = e.action || 'ACTION';
+            const src = e.source ? `[${e.source}]` : '';
+            const msg = e.message || '—';
+            return `${time} | ${src} ${act}: ${msg}`;
+          })
+          .join('\n\n')
+          .slice(0, 1000); // קיצור כדי לא להפיל את Alert
+
+        Alert.alert('Debug Logs', display);
+      } else {
+        Alert.alert('Debug Logs', 'אין לוגים זמינים.');
+      }
+    } catch (err) {
+      Alert.alert('Debug Logs', 'שגיאה בקריאת הלוגים.');
+      console.warn('⚠️ Failed to read debug logs:', err);
+    }
+  }}
+>
+  <Text style={styles.buttonText}>🪵 הצג Debug Logs</Text>
+</TouchableOpacity>
+
+
+
+      <View style={[styles.rowGroup, { marginTop: 16, justifyContent: 'space-between', backgroundColor: '#111', padding: 10, borderRadius: 6, height: 40 }]}>
+        <Text style={[styles.label, { marginTop: 0 }]}>🔔 השמעת התראות:</Text>
+        <Switch
+          value={notificationsEnabled}
+          onValueChange={(val) => {
+            setNotificationsEnabled(val);
+            saveSetting('notificationsEnabled', val);
+          }}
+          trackColor={{ false: '#777', true: '#00ccff' }}
+          thumbColor={notificationsEnabled ? '#ffffff' : '#ccc'}
+        />
+      </View>
 
       <Text style={styles.label}>📢 צליל התראה:</Text>
-      <View style={styles.pickerWrapper}>
+      <View style={[styles.pickerWrapper, { height: 36 }]}>
         <Picker
           selectedValue={notificationSound}
           onValueChange={(val) => {
             setNotificationSound(val);
             saveSetting('notificationSound', val);
           }}
-          style={styles.picker}
+          style={[styles.picker, { height: 36 }]}
           dropdownIconColor="#fff"
         >
           <Picker.Item label="ברירת מחדל" value="notification" />
@@ -148,29 +180,25 @@ export default function SettingsScreen() {
       </View>
 
       <Text style={styles.label}>🔊 עוצמת התראה:</Text>
-      <View style={{ marginVertical: 10 }}>
-        <Slider
-          style={{ width: '100%', height: 40 }}
-          minimumValue={0}
-          maximumValue={1}
-          step={0.1}
-          value={notificationVolume}
-          onValueChange={(val) => {
-            setNotificationVolume(val);
-            saveSetting('notificationVolume', val);
-          }}
-          minimumTrackTintColor="#00ccff"
-          maximumTrackTintColor="#555"
-          thumbTintColor="#00ccff"
-        />
-        <Text style={styles.infoText}>{Math.round(notificationVolume * 100)}%</Text>
-      </View>
+      <Slider
+        style={{ width: '100%', height: 40 }}
+        minimumValue={0}
+        maximumValue={1}
+        step={0.1}
+        value={notificationVolume}
+        onValueChange={(val) => {
+          setNotificationVolume(val);
+          saveSetting('notificationVolume', val);
+        }}
+        minimumTrackTintColor="#00ccff"
+        maximumTrackTintColor="#555"
+        thumbTintColor="#00ccff"
+      />
 
       <TouchableOpacity style={styles.button} onPress={handleTestSound}>
         <Text style={styles.buttonText}>🔊 השמע התראה</Text>
       </TouchableOpacity>
 
-      <Text style={styles.label}>🕒 זמן למחיקת הודעות (בשעות):</Text>
       <TextInput
         style={styles.input}
         value={messageExpiryHours}
@@ -179,9 +207,10 @@ export default function SettingsScreen() {
           saveSetting('messageExpiryHours', val);
         }}
         keyboardType="numeric"
+        placeholder="🕒 זמן למחיקת הודעות (בשעות)"
+        placeholderTextColor="#aaa"
       />
 
-      <Text style={styles.label}>🗑️ ניקוי היסטוריה:</Text>
       <TouchableOpacity style={styles.dangerButton} onPress={handleClearHistory}>
         <Text style={styles.buttonText}>מחק את כל ההודעות</Text>
       </TouchableOpacity>

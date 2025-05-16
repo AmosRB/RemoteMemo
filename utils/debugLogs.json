@@ -1,0 +1,23 @@
+[
+  {
+    "id": "d9cb4d44-50c5-4bb2-9dbb-9ef75db746c2",
+    "timestamp": "2025-05-15T04:10:50.353408",
+    "action": "INIT",
+    "source": "useLedgerSync",
+    "message": "LedgerSync activated for peerId: 192.168.1.228"
+  },
+  {
+    "id": "af3683b3-a660-4320-956c-2bbe0964ae99",
+    "timestamp": "2025-05-15T04:10:50.353464",
+    "action": "SAVE_BLOCK",
+    "source": "useLedgerSync",
+    "message": "Block saved with hash: 9f3c...7a12"
+  },
+  {
+    "id": "41149bda-0cf1-45ef-8717-0bf33836b970",
+    "timestamp": "2025-05-15T04:10:50.353485",
+    "action": "SYNC_RESULT",
+    "source": "useLedgerSync",
+    "message": "Blockchain match verified – GREEN light"
+  }
+]

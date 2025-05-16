@@ -1,4 +1,4 @@
-// MessageDetailScreen.js - כולל שמירת base64 ועדכון סטטוס תקין + played: false
+// MessageDetailScreen.js – גרסה פשוטה עם updateMessage בלבד
 
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
@@ -21,7 +21,6 @@ export default function MessageDetailScreen() {
   const [freeText, setFreeText] = useState(message?.text || '');
   const [recording, setRecording] = useState(null);
   const [recordingUri, setRecordingUri] = useState(message?.audioUri || '');
-  const [audioBase64, setAudioBase64] = useState(message?.audioBase64 || '');
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -34,7 +33,7 @@ export default function MessageDetailScreen() {
     );
   }
 
-  const handleUpdate = async () => {
+  const handleUpdate = () => {
     const updatedMessage = {
       ...message,
       shortName,
@@ -42,28 +41,9 @@ export default function MessageDetailScreen() {
       time,
       text: freeText,
       audioUri: recordingUri,
-      audioBase64: audioBase64 || message.audioBase64 || null,
-      status: 'unread',
-      played: false, // ✅ איפוס השמעה
       updatedAt: new Date().toISOString(),
     };
-
     updateMessage(updatedMessage);
-
-    try {
-      const res = await fetch('http://192.168.1.227:3000/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedMessage),
-      });
-
-      if (!res.ok) {
-        console.warn('⚠️ השרת החזיר שגיאה:', await res.text());
-      }
-    } catch (err) {
-      console.warn('🔁 שליחת עדכון לשרת נכשלה:', err);
-    }
-
     navigation.goBack();
   };
 
@@ -82,13 +62,6 @@ export default function MessageDetailScreen() {
       const uri = recording.getURI();
       setRecordingUri(uri);
       setRecording(null);
-
-      if (uri) {
-        const base64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        setAudioBase64(base64);
-      }
     } else {
       try {
         await Audio.requestPermissionsAsync();
@@ -131,7 +104,7 @@ export default function MessageDetailScreen() {
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'unread': return 'טרם נשלחה';
+      case 'not_delivered': return 'טרם נשלחה';
       case 'pending': return 'ממתין לשליחה';
       case 'delivered': return 'נשלחה והתקבלה';
       case 'received': return 'התקבלה אצל הנמען';

@@ -1,3 +1,5 @@
+// CreateMessageScreen.js – כולל לוגים בכל שלב
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -5,6 +7,7 @@ import { Audio } from 'expo-av';
 import { useMessages } from '../contexts/MessagesContext';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { hashMessage } from '../utils/trustEngine';
 
 export default function CreateMessageScreen() {
   const navigation = useNavigation();
@@ -25,14 +28,38 @@ export default function CreateMessageScreen() {
   useEffect(() => {
     AsyncStorage.getItem('deviceId').then((id) => {
       setDeviceId(id);
+      console.log('📱 Device ID:', id);
     });
   }, []);
 
   const handleSave = async () => {
-    if (!deviceId || !receiverId.trim()) return;
+    console.log('📤 handleSave started');
+    console.log('deviceId:', deviceId, 'receiverId:', receiverId);
+
+    if (!deviceId || !receiverId.trim()) {
+      console.warn('❌ Missing deviceId or receiverId');
+      return;
+    }
+
+    const baseId = String(new Date().getTime());
+    const status = 'not_delivered';
+
+
+    let hash;
+    try {
+      hash = await hashMessage({
+        id: baseId,
+        status,
+        text: freeText || '',
+        audioBase64: audioBase64 || '',
+      });
+    } catch (err) {
+      console.error('❌ Failed to hash message:', err);
+      return;
+    }
 
     const newMessage = {
-      id: String(new Date().getTime()),
+      id: baseId,
       senderId: deviceId,
       receiverId: receiverId.trim(),
       shortName,
@@ -41,20 +68,29 @@ export default function CreateMessageScreen() {
       time,
       audioBase64: audioBase64 || null,
       source: 'local',
-      status: 'unread',
+      status,
       played: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      hash,
     };
 
-    addMessage(newMessage);
+    console.log('📝 New message created:', newMessage);
 
     try {
-      await fetch('http://192.168.1.227:3000/messages', {
+      await addMessage(newMessage);
+      console.log('✅ Message added locally');
+    } catch (err) {
+      console.error('❌ Failed to add message:', err);
+    }
+
+    try {
+      const res = await fetch('http://192.168.1.227:3000/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newMessage),
       });
+      console.log('📡 Message sent to server, status:', res.status);
     } catch (err) {
       console.warn('🔁 שליחה לשרת נכשלה:', err);
     }
@@ -85,6 +121,7 @@ export default function CreateMessageScreen() {
           encoding: FileSystem.EncodingType.Base64,
         });
         setAudioBase64(base64);
+        console.log('🎙️ Recording saved as base64, length:', base64.length);
       }
     } else {
       try {
@@ -92,6 +129,7 @@ export default function CreateMessageScreen() {
         await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
         const { recording } = await Audio.Recording.createAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
         setRecording(recording);
+        console.log('🎙️ Recording started');
       } catch (err) {
         console.error('Failed to start recording', err);
       }

@@ -1,61 +1,86 @@
-// MessageDetailScreen.js - מעודכן עם הסבר לצבעים: כתום=אושרה, אדום=נקראה, כחול=התקבלה
+// JournalScreen.js – כולל הדגשת הודעות שנמחקו ע"י peer
 
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { useRoute } from '@react-navigation/native';
-import { useMessages } from '../contexts/MessagesContext';
+import React, { useEffect, useState } from 'react';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { hashMessage } from '../utils/trustEngine';
 
-export default function MessageDetailScreen() {
-  const route = useRoute();
-  const { messageId } = route.params;
-  const { messages } = useMessages();
+export default function JournalScreen() {
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const message = messages.find((m) => m.id === messageId);
+  useEffect(() => {
+    const loadMessages = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('remoteMemoMessages');
+        if (stored) {
+          const parsed = JSON.parse(stored).filter((msg) => msg.status !== 'deleted_by_peer');
+          const enriched = await Promise.all(parsed.map(async (msg) => ({
+            ...msg,
+            trustHash: await hashMessage(msg),
+          })));
+          setMessages(enriched);
+        }
+      } catch (err) {
+        console.warn('⚠️ Failed to load messages:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadMessages();
+  }, []);
 
-  if (!message) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.content}>הודעה לא נמצאה</Text>
-      </View>
-    );
-  }
+  const renderItem = ({ item }) => (
+    <View style={[styles.logItem, item.status === 'deleted_by_peer' && styles.deleted]}>
+      <Text style={styles.title}>📨 {item.shortName || '(ללא שם)'}</Text>
+      <Text style={styles.details}>🕒 נוצר: {formatDate(item.createdAt)}</Text>
+      <Text style={styles.details}>📤 נשלח: {formatDate(item.updatedAt)}</Text>
+      <Text style={[styles.details, item.status === 'deleted_by_peer' && styles.deletedText]}>
+        📌 סטטוס: {item.status === 'deleted_by_peer' ? 'נמחק ע"י peer' : item.status}
+      </Text>
+      <Text style={styles.hash}>🔐 {item.trustHash}</Text>
+    </View>
+  );
 
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'unread': return 'טרם נפתחה';
-      case 'received': return 'התקבלה (פס כחול)';
-      case 'read': return 'נקראה (נקודה אדומה)';
-      case 'played': return 'הושמעה';
-      case 'confirmed': return 'אושרה (פס כתום)';
-      default: return status;
-    }
+  const formatDate = (iso) => {
+    if (!iso) return '---';
+    const date = new Date(iso);
+    return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>📝 פרטי הודעה</Text>
-
-      <Text style={styles.label}>שם ההודעה:</Text>
-      <Text style={styles.content}>{message.shortName}</Text>
-
-      <Text style={styles.label}>תוכן:</Text>
-      <Text style={styles.content}>{message.text}</Text>
-
-      <Text style={styles.label}>תאריך:</Text>
-      <Text style={styles.content}>{message.date}</Text>
-
-      <Text style={styles.label}>שעה:</Text>
-      <Text style={styles.content}>{message.time}</Text>
-
-      <Text style={styles.label}>סטטוס:</Text>
-      <Text style={styles.content}>{getStatusLabel(message.status)}</Text>
+      <Text style={styles.header}>📘 הודעות שמורות במכשיר</Text>
+      {loading ? (
+        <ActivityIndicator size="large" color="#003366" style={{ marginTop: 30 }} />
+      ) : (
+        <FlatList
+          data={[...messages].reverse()}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 80 }}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f0f0', padding: 20, justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
-  label: { fontSize: 16, fontWeight: 'bold', marginTop: 10, textAlign: 'right' },
-  content: { fontSize: 16, marginBottom: 10, textAlign: 'right' },
+  container: { flex: 1, backgroundColor: '#eef2f5', padding: 15 },
+  header: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginVertical: 12, color: '#003366' },
+  logItem: {
+    backgroundColor: '#fff',
+    padding: 10,
+    marginVertical: 6,
+    borderRadius: 8,
+    elevation: 2,
+  },
+  deleted: {
+    backgroundColor: '#e0e0e0',
+    opacity: 0.5,
+  },
+  title: { fontSize: 16, fontWeight: 'bold', color: '#001f4d' },
+  details: { fontSize: 14, color: '#333', marginTop: 2 },
+  deletedText: { color: '#a00', fontStyle: 'italic' },
+  hash: { fontSize: 12, color: '#666', marginTop: 4, fontStyle: 'italic' },
 });
