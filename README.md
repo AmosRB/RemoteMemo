@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+
+>>>>>>> efa94ed9cd02d467d4791f4fec8fadbfe1ab6377
 # Remote Memo CONNECT
 
 Remote Memo CONNECT is a mobile-first reminder app designed for individuals with memory challenges. It allows family members and caregivers to send time-triggered text or audio messages that are automatically played on the recipient's device.

@@ -1,4 +1,4 @@
-// trustEngine.js – ניהול Blockchain + איתור פערים עם פתרון מדויק
+// trustEngine.js – ניהול Blockchain + איתור פערים עם פתרון מדויק לפי blockNumber
 
 import * as Crypto from 'expo-crypto';
 
@@ -8,12 +8,11 @@ export async function hashMessage(msg) {
   return await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, base);
 }
 
-
-export async function createBlock(ledger, previousHash = '') {
-  const content = JSON.stringify(ledger) + previousHash + Date.now();
+export async function createBlock(ledger, previousHash = '', blockNumber = 0) {
+  const content = JSON.stringify(ledger) + previousHash + blockNumber;
   const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, content);
   return {
-    timestamp: new Date().toISOString(),
+    blockNumber,
     ledger,
     previousHash,
     hash,

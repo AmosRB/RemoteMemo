@@ -1,66 +1,48 @@
-// api.js – Relay Server טהור לדימוי P2P בלבד (ללא שמירה)
+// api.js – Relay Server לשידור בלוקים בין Peers (P2P בלבד, ללא שמירה)
 
-const express = require('express');
-const cors = require('cors');
+import express from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
+
 const app = express();
-const port = 3000;
+const PORT = 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-const subscribers = []; // כל לקוח מחובר
+let subscribers = [];
 
-// שליחת הודעה – שידור מיידי בלבד, אין שמירה
+app.get('/subscribe', (req, res) => {
+  req.socket.setTimeout(0);
+  res.setHeader('Content-Type', 'application/json');
+  subscribers.push((data) => res.json(data));
+});
+
 app.post('/messages', (req, res) => {
-  const msg = req.body;
-
-  if (!msg.id || !msg.shortName) {
-    return res.status(400).json({ error: 'Missing id or shortName' });
+  const { body } = req;
+  if (!body || !body.id) {
+    return res.status(400).json({ error: 'Missing message data' });
   }
 
-  console.log(`📡 Relay → ${msg.shortName}`);
-  subscribers.forEach(fn => fn(msg));
+  subscribers.forEach(fn => fn(body)); // משדר את ההודעה לכל המאזינים
+  subscribers = [];
 
-  res.status(201).json({ message: 'Relayed to peers' });
+  res.status(201).json({ message: 'Message relayed to peer' });
 });
 
-// subscribe – מאפשר ללקוח לקבל הודעות חדשות
-app.get('/subscribe', (req, res) => {
-  let sent = false;
 
-  const send = (msg) => {
-    if (!sent) {
-      sent = true;
-      res.json(msg);
-    }
-  };
+app.post('/ledger', (req, res) => {
+  const { block, senderId } = req.body;
+  if (!block) {
+    return res.status(400).json({ error: 'Missing block' });
+  }
 
-  subscribers.push(send);
-  setTimeout(() => {
-    const index = subscribers.indexOf(send);
-    if (index !== -1) subscribers.splice(index, 1);
-    send(null);
-  }, 30000);
+  subscribers.forEach(fn => fn({ type: 'ledger', block, senderId }));
+  subscribers = [];
+
+  res.status(201).json({ message: 'Block relayed to peer' });
 });
 
-// sync – לא מדמה סטטוסים (כי אין state), רק מאשר peer
-app.post('/sync', (req, res) => {
-  const { deviceId } = req.body;
-  if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
-
-  res.json({ statusUpdates: [], peerFound: true }); // תמיד מחזיר peerFound חיובי
-});
-
-// ledger-sync – אין אחסון בצד שרת, מחזיר תמיד רשימה ריקה
-app.post('/ledger-sync', (req, res) => {
-  res.json({ ledger: [] });
-});
-
-// message/:id – אין שמירת הודעות, מחזיר 404 תמיד
-app.get('/message/:id', (req, res) => {
-  res.status(404).json({ error: 'Message not stored on server' });
-});
-
-app.listen(port, '0.0.0.0', () => {
-  console.log(`🚀 P2P Relay server running at http://0.0.0.0:${port}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Relay server listening on port ${PORT}`);
 });

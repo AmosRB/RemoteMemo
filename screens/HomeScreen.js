@@ -22,28 +22,16 @@ export default function HomeScreen() {
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredContacts, setFilteredContacts] = useState([]);
-  const [syncLedgers, setSyncLedgers] = useState(() => () => {});
   const [syncStatus, setSyncStatus] = useState('idle');
   const [peerOnline, setPeerOnline] = useState(false);
   const blinkingOpacity = useRef(new Animated.Value(1)).current;
   const lastSeenId = useRef(null);
-  
+  const { sendLedgerToPeer } = useLedgerSync(peerIp, sendLedgerQuery, requestMissingMessage, setSyncStatus);
 
   useEffect(() => {
-    AsyncStorage.getItem('peerIp').then(ip => {
-      const resolvedIp = ip || '192.168.1.227';
-      setPeerIp(resolvedIp);
-    });
-    
+    AsyncStorage.getItem('deviceId').then(id => setDeviceId(id));
+    AsyncStorage.getItem('peerIp').then(ip => setPeerIp(ip || '192.168.1.227'));
   }, []);
-
-  useEffect(() => {
-    if (peerIp) {
-      const { syncLedgers } = useLedgerSync(peerIp, sendLedgerQuery, requestMissingMessage, setSyncStatus);
-      setSyncLedgers(() => syncLedgers);
-    }
-  }, [peerIp]);
-  
 
   useEffect(() => {
     const checkPeer = async () => {
@@ -55,7 +43,7 @@ export default function HomeScreen() {
         });
         const data = await res.json();
         setPeerOnline(data.peerFound === true);
-      } catch (err) {
+      } catch {
         setPeerOnline(false);
       }
     };
@@ -76,7 +64,6 @@ export default function HomeScreen() {
         syncAppLayer();
       }
     }, 4000);
-
     return () => clearInterval(interval);
   }, [peerIp, deviceId, messages]);
 
@@ -104,14 +91,13 @@ export default function HomeScreen() {
       playNotificationSound();
     }
   }, [messages, deviceId]);
-  
 
   useEffect(() => {
     (async () => {
       const { status } = await Contacts.requestPermissionsAsync();
       if (status === 'granted') {
         const { data } = await Contacts.getContactsAsync({ fields: [Contacts.Fields.PhoneNumbers] });
-        const contactList = data.filter(c => c.phoneNumbers && c.phoneNumbers.length > 0)
+        const contactList = data.filter(c => c.phoneNumbers?.length > 0)
           .map(c => ({ id: c.id, name: c.name, number: c.phoneNumbers[0].number }));
         setContacts(contactList);
       }
@@ -122,18 +108,16 @@ export default function HomeScreen() {
     if (!deviceId || !peerIp) return;
     setSyncStatus('syncing');
     setTimeout(() => setSyncStatus('idle'), 1000);
-    const outgoingMessages = messages.filter((msg) => msg.senderId === deviceId);
-    const syncPayload = {
-      deviceId,
-      knownStatuses: outgoingMessages.map((m) => ({ id: m.id, status: m.status })),
-    };
     try {
-      await sendSyncQuery(peerIp, syncPayload);
+      await sendSyncQuery(peerIp, {
+        deviceId,
+        knownStatuses: messages.filter(m => m.senderId === deviceId).map(m => ({ id: m.id, status: m.status }))
+      });
+      await sendLedgerToPeer();
     } catch (err) {
       console.warn('⚠️ Manual sync failed:', err);
     }
   };
-
 
   const handleSearch = (text) => {
     setSearchTerm(text);
@@ -150,9 +134,7 @@ export default function HomeScreen() {
     setFilteredContacts([]);
   };
 
-  const handleReselect = () => {
-    setSelectedContact(null);
-  };
+  const handleReselect = () => setSelectedContact(null);
 
   const handleOpenMessage = (message) => {
     if (!deviceId) return;
@@ -170,7 +152,8 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity onPress={() => handleOpenMessage(item)}>
         <MessageWrapper
-          style={[styles.messageBox,
+          style={[
+            styles.messageBox,
             isMine ? styles.outgoing : styles.incoming,
             styles.messageShadow,
             isDeletedByPeer && { opacity: 0.5 },
@@ -194,17 +177,26 @@ export default function HomeScreen() {
     );
   };
 
+  // ✅ הצגת כל ההודעות אם לא נבחר איש קשר
+  const filteredMessages = selectedContact
+    ? messages.filter(
+        (m) =>
+          m.receiverId === selectedContact.number ||
+          m.senderId === selectedContact.number
+      )
+    : messages;
+
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
         <View style={styles.rowWithIndicator}>
-        <TouchableOpacity onPress={manualSync}>
-  {peerOnline && syncStatus !== 'ok' ? (
-    <Animated.View style={[styles.syncIndicator, styles.yellow, { opacity: blinkingOpacity }]} />
-  ) : (
-    <View style={[styles.syncIndicator, getSyncStyle() || {}]} />
-  )}
-</TouchableOpacity>
+          <TouchableOpacity onPress={manualSync}>
+            {peerOnline && syncStatus !== 'ok' ? (
+              <Animated.View style={[styles.syncIndicator, styles.yellow, { opacity: blinkingOpacity }]} />
+            ) : (
+              <View style={[styles.syncIndicator, getSyncStyle() || {}]} />
+            )}
+          </TouchableOpacity>
 
           {selectedContact ? (
             <TouchableOpacity onPress={handleReselect}>
@@ -220,6 +212,7 @@ export default function HomeScreen() {
             />
           )}
         </View>
+
         {filteredContacts.length > 0 && !selectedContact && (
           <FlatList
             data={filteredContacts}
@@ -233,13 +226,15 @@ export default function HomeScreen() {
           />
         )}
       </View>
+
       <FlatList
         ref={flatListRef}
-        data={messages}
+        data={filteredMessages}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: 80 }}
         renderItem={renderMessageItem}
       />
+
       <TouchableOpacity style={styles.bottomButton} onPress={() => navigation.navigate('CreateMessage')}>
         <Text style={styles.bottomButtonText}>הודעה חדשה</Text>
       </TouchableOpacity>

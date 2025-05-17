@@ -47,7 +47,7 @@ export const MessagesProvider = ({ children }) => {
 
     const updatedMessages = [...messages, fullMessage];
     setMessages(updatedMessages);
-    saveMessages(updatedMessages);
+    await saveMessages(updatedMessages); // ✅ now with await
   };
 
   const updateMessage = async (updatedMessage) => {
@@ -57,7 +57,7 @@ export const MessagesProvider = ({ children }) => {
         : msg
     );
     setMessages(updatedMessages);
-    saveMessages(updatedMessages);
+    await saveMessages(updatedMessages); // ✅
   };
 
   const updateMessageStatus = async (id, newStatus, peerId = null) => {
@@ -67,71 +67,67 @@ export const MessagesProvider = ({ children }) => {
         : msg
     );
     setMessages(updatedMessages);
-    saveMessages(updatedMessages);
+    await saveMessages(updatedMessages); // ✅
   };
 
   const deleteMessage = async (id) => {
     const updatedMessages = messages.filter((msg) => msg.id !== id);
     setMessages(updatedMessages);
-    saveMessages(updatedMessages);
+    await saveMessages(updatedMessages); // ✅
   };
 
   const clearMessages = async () => {
     setMessages([]);
-    await AsyncStorage.removeItem('remoteMemoMessages');
+    await AsyncStorage.removeItem(STORAGE_KEY);
   };
-  
 
   const logSyncEvent = async (event) => {
     try {
       const logs = await AsyncStorage.getItem('syncLogs');
       const parsed = logs ? JSON.parse(logs) : [];
-  
+
       const logItem = {
         ...event,
         localTime: new Date().toLocaleString(),
       };
-  
+
       const updated = [...parsed, logItem];
       await AsyncStorage.setItem('syncLogs', JSON.stringify(updated));
-  
+
       console.log(`📗 Sync log [${logItem.localTime}]:`);
       console.log(`➡️  From: ${event.from} → Peer: ${event.peer}`);
       console.log(`📥  Added: ${event.added} | Updated: ${event.updated} | Deleted: ${event.deleted}`);
-  
     } catch (e) {
       console.warn('⚠️ Failed to log sync event:', e);
     }
   };
-  
+
   useEffect(() => {
     if (!deviceId) return;
-  
     let isActive = true;
-  
+
     const poll = async () => {
       while (isActive) {
         try {
           const res = await fetch(`${RELAY_SERVER_URL}/subscribe`);
           const msg = await res.json();
-  
+
           if (msg && msg.id) {
             const isToMe = msg.receiverId === deviceId || msg.senderId === deviceId;
             if (!isToMe) continue;
-  
+
             setMessages((oldMessages) => {
               const index = oldMessages.findIndex((m) => m.id === msg.id);
               let updatedMessages;
-  
+
               if (index !== -1) {
-                // ✏️ הודעה קיימת – נעדכן אם צריך
                 const original = oldMessages[index];
                 const isIncoming = msg.receiverId === deviceId;
-  
+
                 const shouldUpdateStatus =
                   isIncoming &&
                   (!original || ['not_delivered', 'pending'].includes(original.status));
-  
+
                 const updated = {
                   ...original,
                   ...msg,
@@ -140,25 +136,24 @@ export const MessagesProvider = ({ children }) => {
                   source: original.source || (msg.senderId === deviceId ? 'local' : 'remote'),
                   senderId: original.senderId || msg.senderId,
                 };
-  
+
                 updatedMessages = [...oldMessages];
                 updatedMessages[index] = updated;
-  
               } else {
-                // 🆕 הודעה חדשה – נכניס עם סטטוס received אם זה אליי
                 const isIncoming = msg.receiverId === deviceId;
-  
                 const incoming = {
                   ...msg,
-                  status: isIncoming && ['not_delivered', 'pending'].includes(msg.status) ? 'received' : msg.status,
+                  status: isIncoming && ['not_delivered', 'pending'].includes(msg.status)
+                    ? 'received'
+                    : msg.status,
                   senderId: msg.senderId || 'unknown',
                   source: msg.senderId === deviceId ? 'local' : 'remote',
                   updatedAt: new Date().toISOString(),
                 };
-  
+
                 updatedMessages = [...oldMessages, incoming];
               }
-  
+
               saveMessages(updatedMessages);
               return updatedMessages;
             });
@@ -166,15 +161,14 @@ export const MessagesProvider = ({ children }) => {
         } catch (err) {
           console.warn('🔁 Waiting for relay server...', err);
         }
-  
+
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     };
-  
+
     poll();
     return () => { isActive = false; };
   }, [deviceId]);
-  
 
   return (
     <MessagesContext.Provider
@@ -188,8 +182,6 @@ export const MessagesProvider = ({ children }) => {
         clearMessages,
       }}
     >
-
-      
       {children}
     </MessagesContext.Provider>
   );

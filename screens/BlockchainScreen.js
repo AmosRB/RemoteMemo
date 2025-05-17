@@ -1,46 +1,56 @@
-// BlockchainScreen.js – תצוגה גרפית של ה־TRUST Ledger עם לוג ל-forceSync
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onNewBlock } from '../hooks/useLedgerSync';
 
 export default function BlockchainScreen() {
+  const scrollViewRef = useRef(null);
   const [blocks, setBlocks] = useState([]);
   const [lastForceSync, setLastForceSync] = useState(null);
 
-  useEffect(() => {
-    const loadBlocks = async () => {
-      try {
-        const stored = await AsyncStorage.getItem('trustBlocks');
-        const parsed = stored ? JSON.parse(stored) : [];
-        setBlocks(parsed.reverse());
-      } catch (err) {
-        console.warn('⚠️ Failed to load blocks:', err);
-      }
-    };
+  const loadBlocks = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('trustBlocks');
+      const parsed = stored ? JSON.parse(stored) : [];
+      setBlocks(parsed);
+    } catch (err) {
+      console.warn('⚠️ Failed to load blocks:', err);
+    }
+  };
 
-    const loadForceSyncLog = async () => {
-      try {
-        const logs = await AsyncStorage.getItem('syncLogs');
-        if (logs) {
-          const parsed = JSON.parse(logs);
-          const forceEntries = parsed.filter(e => e.reason === 'block mismatch');
-          if (forceEntries.length > 0) {
-            const last = forceEntries[forceEntries.length - 1];
-            setLastForceSync(last.localTime || last.timestamp);
-          }
+  const loadForceSyncLog = async () => {
+    try {
+      const logs = await AsyncStorage.getItem('syncLogs');
+      if (logs) {
+        const parsed = JSON.parse(logs);
+        const forceEntries = parsed.filter(e => e.reason === 'block mismatch');
+        if (forceEntries.length > 0) {
+          const last = forceEntries[forceEntries.length - 1];
+          setLastForceSync(last.localTime || last.timestamp);
         }
-      } catch (err) {
-        console.warn('⚠️ Failed to load sync logs:', err);
       }
-    };
+    } catch (err) {
+      console.warn('⚠️ Failed to load sync logs:', err);
+    }
+  };
 
-    loadBlocks();
-    loadForceSyncLog();
+  const refreshAndScroll = async () => {
+    await loadBlocks();
+    await loadForceSyncLog();
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 300);
+  };
+
+  useEffect(() => {
+    refreshAndScroll();
+    onNewBlock(() => {
+      refreshAndScroll();
+    });
   }, []);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView ref={scrollViewRef} contentContainerStyle={styles.container}>
       <Text style={styles.title}>📘 TRUST Blockchain</Text>
 
       {lastForceSync && (
@@ -53,20 +63,17 @@ export default function BlockchainScreen() {
 
       {blocks.map((item, index) => (
         <View key={index} style={styles.blockContainer}>
-          <Text style={styles.blockHeader}>🔷 בלוק #{blocks.length - index} – {new Date(item.timestamp).toLocaleString()}</Text>
-
+          <Text style={styles.blockHeader}>🔷 בלוק #{item.blockNumber ?? index}</Text>
           <View style={styles.messageRowHeader}>
             <Text style={styles.msgTitle}>שם ההודעה</Text>
             <Text style={styles.msgStatus}>סטטוס</Text>
           </View>
-
           {item.ledger.map((entry, idx) => (
             <View key={idx} style={styles.messageRow}>
               <Text style={styles.msgTitle}>{entry.id}</Text>
               <Text style={styles.msgStatus}>{entry.status}</Text>
             </View>
           ))}
-
           <Text style={styles.hashLabel}>🔐 Hash:</Text>
           <Text style={styles.hash}>{item.hash}</Text>
           <Text style={styles.hashLabel}>🔗 Previous:</Text>

@@ -1,32 +1,33 @@
-// useLedgerSync.js – כולל לוגים מובנים לכל שלב
-
 import { useEffect, useState } from 'react';
 import { useMessages } from '../contexts/MessagesContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  hashMessage as generateHash,
-  createBlock,
-  verifyBlockchainMatch,
-  diffLedgers
-} from '../utils/trustEngine';
+import { hashMessage as generateHash, createBlock } from '../utils/trustEngine';
+import sendLedgerQuery from '../utils/sendLedgerQuery';
+import createAppSyncLayer from '../utils/AppSyncLayer';
 
-export default function useLedgerSync(peerId, sendLedgerQuery, requestMissingMessage, setSyncStatus) {
-  const { messages, addMessage, updateMessageStatus, logSyncEvent, forceSync } = useMessages();
-  const [failedAttempts, setFailedAttempts] = useState(0);
+let notifyNewBlock = () => {};
+export const onNewBlock = (callback) => {
+  notifyNewBlock = callback;
+};
+
+export default function useLedgerSync(peerId, sendLedgerQueryUnused, requestMissingMessage, setSyncStatus) {
+  const { messages, addMessage, updateMessageStatus, logSyncEvent, updateMessage } = useMessages();
+  const [deviceId, setDeviceId] = useState(null);
+  const [relayIp, setRelayIp] = useState('');
+
+  useEffect(() => {
+    AsyncStorage.getItem('deviceId').then((val) => val && setDeviceId(val));
+    AsyncStorage.getItem('relayIp').then((ip) => setRelayIp(ip || '192.168.1.228'));
+  }, []);
 
   const buildLocalLedger = async (messageList) => {
-    console.log('📄 Building local ledger...');
-    const ledger = await Promise.all(
-      messageList
-        .filter((msg) => msg.id)
-        .map(async (msg) => ({
-          id: msg.id,
-          status: msg.status,
-          hash: await generateHash(msg),
-        }))
+    return await Promise.all(
+      messageList.filter((msg) => msg.id).map(async (msg) => ({
+        id: msg.id,
+        status: msg.status,
+        hash: await generateHash(msg),
+      }))
     );
-    console.log('📄 Local ledger built:', ledger);
-    return ledger;
   };
 
   const saveBlockToStorage = async (block) => {
@@ -34,13 +35,11 @@ export default function useLedgerSync(peerId, sendLedgerQuery, requestMissingMes
       const stored = await AsyncStorage.getItem('trustBlocks');
       const existing = stored ? JSON.parse(stored) : [];
       const last = existing[existing.length - 1];
-      if (last && last.hash === block.hash) {
-        console.log('🟡 Duplicate block hash – skipping save');
-        return;
-      }
+      if (last && last.hash === block.hash) return;
       const updated = [...existing, block];
       await AsyncStorage.setItem('trustBlocks', JSON.stringify(updated));
       console.log('✅ Block saved with hash:', block.hash);
+      notifyNewBlock();
     } catch (err) {
       console.warn('⚠️ Failed to save block:', err);
     }
@@ -49,104 +48,128 @@ export default function useLedgerSync(peerId, sendLedgerQuery, requestMissingMes
   const loadLocalBlocks = async () => {
     try {
       const stored = await AsyncStorage.getItem('trustBlocks');
-      const retention = await AsyncStorage.getItem('messageExpiryHours');
-      const hours = parseInt(retention || '24');
-      const cutoff = Date.now() - hours * 60 * 60 * 1000;
-      const blocks = stored ? JSON.parse(stored) : [];
-      const recentBlocks = blocks.filter(b => new Date(b.timestamp).getTime() > cutoff);
-      console.log('📦 Loaded local blocks:', recentBlocks);
-      return recentBlocks;
+      return stored ? JSON.parse(stored) : [];
     } catch (err) {
-      console.warn('⚠️ Failed to load local blocks:', err);
       return [];
     }
   };
 
-  const syncLedgers = async () => {
-    if (!peerId) return;
-    setSyncStatus('syncing');
-
-    const currentMessages = [...messages];
-    const localLedger = await buildLocalLedger(currentMessages);
-    const myBlocks = await loadLocalBlocks();
-    const previousHash = myBlocks.length > 0 ? myBlocks[myBlocks.length - 1].hash : '0';
-
-    console.log('🔗 Creating block with previousHash:', previousHash);
-    const newBlock = await createBlock(localLedger, previousHash);
-    console.log('🧱 New block created:', newBlock);
-
-    await saveBlockToStorage(newBlock);
-
+  const overwriteLedgerFromPeer = async (peerBlock) => {
     try {
-      console.log('📡 Sending ledger to peer...');
-      const peerLedger = await sendLedgerQuery(peerId, localLedger);
-      console.log('📬 Received peerLedger:', peerLedger);
+      await AsyncStorage.setItem('trustBlocks', JSON.stringify([peerBlock]));
+      notifyNewBlock();
+      setSyncStatus('ok');
+      console.log('🧩 Ledger המקומי הוחלף בזה של peer (hard override)');
+    } catch (err) {
+      console.warn('❌ נכשל בשמירת Ledger מה-peer:', err);
+    }
+  };
 
-      if (!peerLedger || !Array.isArray(peerLedger) || peerLedger.length === 0) {
-        console.warn('⚠️ Invalid or empty peerLedger');
-        setFailedAttempts((prev) => {
-          const next = prev + 1;
-          if (next >= 3) setSyncStatus('idle');
-          return next;
-        });
-        return;
-      }
+  const handleIncomingBlock = async (incomingBlock, peerId) => {
+    const localBlocks = await loadLocalBlocks();
+    const last = localBlocks.at(-1);
 
-      setFailedAttempts(0);
-
-      const diff = diffLedgers(localLedger, peerLedger);
-
-      for (let id of diff.missingMessages) {
-        const msg = await requestMissingMessage(peerId, id);
-        if (msg) {
-          console.log('📥 Retrieved missing message:', msg.id);
-          await addMessage(msg);
-        }
-      }
-
-      for (let entry of diff.mismatchedStatuses) {
-        console.log(`🔄 Updating mismatched status: ${entry.id} → ${entry.remote}`);
-        await updateMessageStatus(entry.id, entry.remote, peerId);
-      }
-
+    if (!last || incomingBlock.previousHash === last.hash) {
+      await saveBlockToStorage(incomingBlock);
+      setSyncStatus('ok');
       await logSyncEvent({
         timestamp: new Date().toISOString(),
-        from: 'me',
-        peer: peerId,
-        added: diff.missingMessages.length,
-        updated: diff.mismatchedStatuses.length + diff.mismatchedHashes.length,
+        from: peerId,
+        peer: 'me',
+        added: incomingBlock.ledger.length,
+        updated: 0,
         deleted: 0,
+        reason: 'block appended by hash match',
       });
+    } else {
+      console.warn('⚠️ Block mismatch – hash chain broken');
+      setSyncStatus('idle');
+    }
+  };
 
-      const peerBlocks = await loadLocalBlocks();
-      console.log('🧾 Verifying blockchain match...');
-      const isVerified = verifyBlockchainMatch([...myBlocks, newBlock], peerBlocks);
+  const sendLedgerToPeer = async () => {
+    try {
+      const ledger = await buildLocalLedger(messages);
+      const stored = await AsyncStorage.getItem('trustBlocks');
+      const blocks = stored ? JSON.parse(stored) : [];
+      const lastBlock = blocks[blocks.length - 1];
+      const newNumber = (lastBlock?.blockNumber ?? -1) + 1;
+      const newBlock = await createBlock(ledger, lastBlock?.hash || '', newNumber);
 
-      if (isVerified) {
-        console.log('🟢 Blockchain match verified – GREEN light');
+      const peerBlock = await sendLedgerQuery(peerId, ledger);
+      const localHash = newBlock.hash;
+      const localNumber = newBlock.blockNumber ?? 0;
+      const peerNumber = peerBlock?.blockNumber ?? 0;
+
+      if (peerBlock && peerBlock.hash === localHash) {
+        await saveBlockToStorage(newBlock);
+        console.log('🔗 אישור הדדי – בלוק נחתם');
         setSyncStatus('ok');
+      } else if (peerBlock && peerNumber > localNumber) {
+        await overwriteLedgerFromPeer(peerBlock);
+
+        // ✅ לאחר החלפת ה־Ledger — לבצע סנכרון סטטוסים כדי לתקן את ההודעות:
+        const appSync = createAppSyncLayer({ messages, updateMessage, logSyncEvent }, peerId, deviceId);
+        await appSync.forceSync({ reason: 'peer has newer block' });
+        console.log('🔁 בוצע תיקון סטטוסים ע"י AppSync לאחר override');
+
       } else {
-        console.warn('❌ Blockchain mismatch – attempting forceSync...');
+        console.warn('🛑 אין אישור מ-peer – בלוק לא נשמר');
         setSyncStatus('idle');
-        if (typeof forceSync === 'function') {
-          await forceSync({ reason: 'block mismatch' });
-        }
       }
 
-    } catch (err) {
-      console.warn('❌ Ledger sync failed:', err);
-      setFailedAttempts((prev) => {
-        const next = prev + 1;
-        if (next >= 3) setSyncStatus('idle');
-        return next;
+      const res = await fetch(`http://${relayIp}:3000/ledger`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-device-id': deviceId,
+        },
+        body: JSON.stringify({ type: 'ledger', senderId: deviceId, block: newBlock }),
       });
+
+      if (!res.ok) {
+        console.warn('❌ שליחת ledger נכשלה, סטטוס:', res.status);
+      } else {
+        console.log('📤 בלוק נשלח ל־peer');
+      }
+    } catch (err) {
+      console.warn('🔁 שגיאה בשליחת ledger ל־peer:', err);
     }
   };
 
   useEffect(() => {
-    const interval = setInterval(syncLedgers, 5000);
-    return () => clearInterval(interval);
-  }, [messages.length, peerId]);
+    let active = true;
 
-  return { syncLedgers };
+    const pollLedger = async () => {
+      while (active) {
+        try {
+          const res = await fetch(`http://${relayIp}:3000/subscribe`);
+          const msg = await res.json();
+
+          if (msg?.type === 'ledger' && msg.block) {
+            await handleIncomingBlock(msg.block, msg.senderId || 'unknown');
+          }
+        } catch (err) {
+          console.warn('📭 שגיאה בקבלת ledger מ־peer:', err);
+        }
+
+        await new Promise((res) => setTimeout(res, 2000));
+      }
+    };
+
+    if (relayIp) pollLedger();
+    return () => {
+      active = false;
+    };
+  }, [relayIp]);
+
+  useEffect(() => {
+    if (!peerId) return;
+    const interval = setInterval(() => {
+      sendLedgerToPeer();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [peerId]);
+
+  return { sendLedgerToPeer };
 }
